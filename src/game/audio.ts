@@ -36,14 +36,6 @@ function makeGain(vol: number): GainNode {
   return g;
 }
 
-function makeSine(freq: number, gainNode: GainNode): OscillatorNode {
-  const o = ctx!.createOscillator();
-  o.type = 'sine';
-  o.frequency.setValueAtTime(freq, time());
-  o.connect(gainNode);
-  return o;
-}
-
 function makeNoise(duration: number): AudioBufferSourceNode {
   const sampleRate = ctx!.sampleRate;
   const bufLen = Math.ceil(sampleRate * duration);

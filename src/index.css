@@ -1,0 +1,603 @@
+/* ===========================
+   GRID ROGUE — Global Styles
+   Doctor vs. Germs theme
+   Pixel art / clinical aesthetic
+   =========================== */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #0d1b2a;
+  --bg-panel: #112233;
+  --bg-card: #162940;
+  --border: #1e3a5f;
+  --border-bright: #2e5a8f;
+  --text: #c8dff0;
+  --text-dim: #7a9bbf;
+  --accent-green: #06d6a0;
+  --accent-red: #e63946;
+  --accent-yellow: #ffd60a;
+  --accent-blue: #4361ee;
+  --accent-purple: #9d4edd;
+  --font: 'Press Start 2P', 'Courier New', monospace;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 10px;
+  overflow: hidden;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  image-rendering: pixelated;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+.app {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+}
+
+/* ========== START SCREEN ========== */
+
+.screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+}
+
+.start-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  max-width: 360px;
+  width: 100%;
+  padding: 16px;
+}
+
+.title-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Pixel art doctor representation */
+.pixel-doctor {
+  width: 48px;
+  height: 48px;
+  background: #fff;
+  box-shadow:
+    0 0 0 4px #1a2a3a,
+    inset 20px 20px 0 0 #e63946,
+    inset 20px 16px 0 0 #e63946,
+    inset 16px 20px 0 0 #e63946;
+  image-rendering: pixelated;
+  position: relative;
+}
+
+.game-title {
+  font-size: 28px;
+  line-height: 1.4;
+  color: #fff;
+  text-align: center;
+  text-shadow:
+    3px 3px 0 #1a2a3a,
+    -1px -1px 0 #1a2a3a;
+  letter-spacing: 4px;
+}
+
+.game-subtitle {
+  font-size: 8px;
+  color: var(--accent-green);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  border: 2px solid var(--accent-green);
+  padding: 4px 8px;
+}
+
+.score-board {
+  background: var(--bg-panel);
+  border: 2px solid var(--border);
+  width: 100%;
+  padding: 12px 16px;
+}
+
+.score-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  color: var(--text-dim);
+}
+
+.score-best {
+  color: var(--accent-yellow);
+}
+
+.score-label {
+  flex: 1;
+  font-size: 8px;
+}
+
+.score-value {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.score-best .score-value {
+  color: var(--accent-yellow);
+}
+
+.score-divider {
+  height: 2px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.play-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--accent-green);
+  color: #0a1a0a;
+  border: none;
+  padding: 14px 32px;
+  font-family: var(--font);
+  font-size: 14px;
+  cursor: pointer;
+  width: 100%;
+  justify-content: center;
+  outline: 4px solid #0a1a0a;
+  transition: background 0.1s;
+  letter-spacing: 2px;
+}
+
+.play-button:hover {
+  background: #08f5b8;
+}
+
+.play-button:active {
+  transform: translate(2px, 2px);
+}
+
+.controls-hint {
+  font-size: 7px;
+  color: var(--text-dim);
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+/* ========== GAME WRAPPER ========== */
+
+.game-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  height: 100%;
+  width: 100%;
+}
+
+/* ========== HUD ========== */
+
+.hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 600px;
+  padding: 8px 12px;
+  background: var(--bg-panel);
+  border-bottom: 2px solid var(--border);
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.hud-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.hud-hp {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.hp-heart {
+  display: flex;
+  align-items: center;
+}
+
+.hp-empty {
+  opacity: 0.3;
+}
+
+.hud-exp-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent-green);
+}
+
+.exp-bar-track {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border: 1px solid var(--border-bright);
+}
+
+.exp-bar-fill {
+  height: 100%;
+  background: var(--accent-green);
+  transition: width 0.1s;
+}
+
+.exp-label {
+  font-size: 7px;
+  color: var(--accent-green);
+  min-width: 28px;
+  text-align: right;
+}
+
+.hud-center {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.hud-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-dim);
+  font-size: 9px;
+}
+
+.hud-right {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 80px;
+}
+
+.status-badge {
+  font-size: 6px;
+  padding: 2px 4px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.badge-shield { color: var(--accent-blue); border-color: var(--accent-blue); }
+.badge-boost { color: var(--accent-yellow); border-color: var(--accent-yellow); }
+
+/* ========== CANVAS ========== */
+
+.canvas-container {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  width: 100%;
+}
+
+.game-canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.score-display {
+  padding: 6px 12px;
+  font-size: 8px;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border-top: 2px solid var(--border);
+  width: 100%;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ========== OVERLAYS ========== */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 27, 42, 0.88);
+  z-index: 10;
+}
+
+/* ========== SKILL SELECT ========== */
+
+.skill-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 540px;
+  padding: 16px;
+}
+
+.skill-header {
+  text-align: center;
+}
+
+.skill-level-tag {
+  font-size: 8px;
+  color: var(--accent-green);
+  border: 2px solid var(--accent-green);
+  padding: 2px 8px;
+  display: inline-block;
+  margin-bottom: 10px;
+}
+
+.skill-title {
+  font-size: 14px;
+  color: #fff;
+  letter-spacing: 2px;
+}
+
+.skill-cards {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.skill-card {
+  flex: 1;
+  min-width: 120px;
+  max-width: 160px;
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  padding: 14px 10px;
+  cursor: pointer;
+  font-family: var(--font);
+  text-align: left;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.1s, background 0.1s;
+}
+
+.skill-card:hover {
+  border-color: var(--accent-green);
+  background: var(--bg-panel);
+}
+
+.skill-card:active {
+  transform: translate(2px, 2px);
+}
+
+.skill-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-green);
+}
+
+.skill-category-icon {
+  display: flex;
+  align-items: center;
+}
+
+.skill-category {
+  font-size: 7px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.skill-card-name {
+  font-size: 9px;
+  color: #fff;
+  line-height: 1.5;
+}
+
+.skill-card-desc {
+  font-size: 7px;
+  color: var(--text-dim);
+  line-height: 1.8;
+}
+
+/* ========== GAME OVER ========== */
+
+.gameover-overlay {
+  background: rgba(13, 27, 42, 0.95);
+}
+
+.gameover-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  max-width: 320px;
+  width: 100%;
+  padding: 16px;
+}
+
+.gameover-header {
+  text-align: center;
+  position: relative;
+}
+
+/* Pixel germ decoration */
+.gameover-pixel-germ {
+  width: 40px;
+  height: 40px;
+  background: var(--accent-red);
+  margin: 0 auto 12px;
+  box-shadow:
+    0 -8px 0 var(--accent-red),
+    0 8px 0 var(--accent-red),
+    -8px 0 0 var(--accent-red),
+    8px 0 0 var(--accent-red);
+}
+
+.gameover-title {
+  font-size: 20px;
+  color: var(--accent-red);
+  text-shadow: 3px 3px 0 #4a0000;
+  letter-spacing: 4px;
+}
+
+.new-best-badge {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 8px;
+  color: var(--accent-yellow);
+  border: 2px solid var(--accent-yellow);
+  padding: 2px 8px;
+  animation: blink 0.8s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.gameover-stats {
+  background: var(--bg-panel);
+  border: 2px solid var(--border);
+  width: 100%;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  color: var(--text-dim);
+}
+
+.stat-score {
+  color: var(--text);
+}
+
+.stat-label {
+  flex: 1;
+  font-size: 8px;
+}
+
+.stat-value {
+  font-size: 10px;
+  color: var(--text);
+}
+
+.score-final {
+  color: var(--accent-yellow);
+  font-size: 14px;
+}
+
+.stat-divider {
+  height: 2px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.gameover-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.action-button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  font-family: var(--font);
+  font-size: 9px;
+  cursor: pointer;
+  border: 2px solid;
+  letter-spacing: 1px;
+  transition: background 0.1s;
+}
+
+.action-button:active {
+  transform: translate(2px, 2px);
+}
+
+.action-button.primary {
+  background: var(--accent-green);
+  color: #0a1a0a;
+  border-color: #0a1a0a;
+}
+
+.action-button.primary:hover {
+  background: #08f5b8;
+}
+
+.action-button.secondary {
+  background: transparent;
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+
+.action-button.secondary:hover {
+  background: var(--bg-panel);
+  border-color: var(--border-bright);
+  color: var(--text);
+}
+
+/* ========== RESPONSIVE ========== */
+
+@media (max-width: 480px) {
+  .game-title {
+    font-size: 20px;
+  }
+  .skill-card {
+    min-width: 100px;
+    max-width: 140px;
+    padding: 10px 8px;
+  }
+  .skill-card-name {
+    font-size: 8px;
+  }
+}
+
+@media (max-height: 600px) {
+  .hud {
+    padding: 4px 12px;
+  }
+}

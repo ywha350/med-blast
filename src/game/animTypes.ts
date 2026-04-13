@@ -8,6 +8,11 @@ export interface EnemyAnimData {
   maxHp: number;
   type: EnemyType;
   isHit: boolean;
+  bossLevel?: number;
+  burstMovesLeft?: number;
+  hidden?: boolean;
+  shield?: boolean;
+  assassinAnim?: 'hiding' | 'appearing';
 }
 
 export interface DeathAnim {
@@ -15,6 +20,7 @@ export interface DeathAnim {
   from: Position;  // pre-movement position
   pos: Position;   // post-movement position (where death burst plays)
   type: EnemyType;
+  size?: number;   // 2 for abnormal, undefined for 1×1
 }
 
 export interface ProjectileAnimData {
@@ -23,6 +29,7 @@ export interface ProjectileAnimData {
   to: Position;
   dx: number;
   dy: number;
+  fromBoss?: boolean;
 }
 
 export interface EnemyLungeAnim {
@@ -44,12 +51,14 @@ export interface AnimDiff {
   attackPositions: Position[];
   chainLinks: ChainLink[];
   playerHit: boolean;
+  playerDied: boolean;
   projectiles: ProjectileAnimData[];
   enemyLunges: EnemyLungeAnim[];
+  shockwaves: Position[];   // shocker fire positions this tick
 }
 
-export const TICK_DURATION = 130;
-export const DEATH_DURATION = 300;
+export const TICK_DURATION = 160;
+export const DEATH_DURATION = 420;
 export const AFTER_MOVE_DELAY = 0;   // attack starts immediately after movement
-export const EFFECT_DURATION = 100;  // ms for attack line animation
-export const HIT_FLASH_DURATION = 100; // ms for player hit flash (after attack phase)
+export const EFFECT_DURATION = 130;  // ms for attack line animation
+export const HIT_FLASH_DURATION = 130; // ms for player hit flash (after attack phase)

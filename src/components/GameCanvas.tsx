@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { GameState, Direction } from '../game/types';
 import { renderFrame, TILE, VIEWPORT } from '../game/renderer';
 import { AnimDiff, ChainLink, DeathAnim, TICK_DURATION, DEATH_DURATION, AFTER_MOVE_DELAY, EFFECT_DURATION, HIT_FLASH_DURATION } from '../game/animTypes';
+import { abnormalTiles } from '../game/engine';
 
 interface GameCanvasProps {
   state: GameState;
@@ -25,6 +26,13 @@ function buildAnimDiff(prev: GameState, curr: GameState): AnimDiff {
       maxHp: e.maxHp,
       type: e.type,
       isHit: prev !== undefined && prev.hp > e.hp,
+      bossLevel: e.bossLevel,
+      burstMovesLeft: prev?.burstMovesLeft ?? e.burstMovesLeft,
+      hidden: e.hidden,
+      shield: e.shield,
+      assassinAnim: (e.type === 'assassin' && prev
+        ? (!prev.hidden && e.hidden ? 'hiding' : prev.hidden && !e.hidden ? 'appearing' : undefined)
+        : undefined) as 'hiding' | 'appearing' | undefined,
     };
   });
 
@@ -38,7 +46,7 @@ function buildAnimDiff(prev: GameState, curr: GameState): AnimDiff {
   // Deaths: present in prev, absent in curr — animate from pre-tick to post-movement
   const deaths = prev.enemies
     .filter(e => !currMap.has(e.id))
-    .map(e => ({ id: e.id, from: e.pos, pos: killPosMap.get(e.id) ?? e.pos, type: e.type }));
+    .map(e => ({ id: e.id, from: e.pos, pos: killPosMap.get(e.id) ?? e.pos, type: e.type, size: e.type === 'abnormal' ? 2 : undefined }));
 
   // Attack positions: direct hits only (exclude chain hits — those get their own animation)
   const attackPositions = curr.damageNumbers
@@ -59,11 +67,16 @@ function buildAnimDiff(prev: GameState, curr: GameState): AnimDiff {
     .filter((l): l is ChainLink => l !== null);
 
   const playerHit = curr.hitFlash && curr.hitFlashTick === curr.tick;
+  const playerDied = curr.phase === 'game_over' && playerHit;
 
   // Enemies adjacent to player post-tick that caused a hit lunge toward player
   const enemyLunges = playerHit
     ? curr.enemies
         .filter(e => {
+          if (e.hidden) return false;
+          if (e.type === 'abnormal') {
+            return abnormalTiles(e.pos).some(t => Math.abs(t.x - curr.player.pos.x) + Math.abs(t.y - curr.player.pos.y) <= 1);
+          }
           const dx = Math.abs(e.pos.x - curr.player.pos.x);
           const dy = Math.abs(e.pos.y - curr.player.pos.y);
           return dx + dy <= 1;
@@ -83,7 +96,10 @@ function buildAnimDiff(prev: GameState, curr: GameState): AnimDiff {
     to: p.pos,
     dx: p.dx,
     dy: p.dy,
+    fromBoss: p.fromBoss,
   }));
+
+  const shockwaves = curr.shockerPositions ?? [];
 
   return {
     playerFrom: prev.player.pos,
@@ -93,8 +109,10 @@ function buildAnimDiff(prev: GameState, curr: GameState): AnimDiff {
     attackPositions,
     chainLinks,
     playerHit,
+    playerDied,
     projectiles,
     enemyLunges,
+    shockwaves,
   };
 }
 
@@ -114,6 +132,7 @@ export function GameCanvas({ state, onMove, onSkillSelectReady }: GameCanvasProp
   const onSkillSelectReadyRef = useRef(onSkillSelectReady);
   const pendingSkillSelectRef = useRef(false);
   const lingeringDeathsRef = useRef<{ death: DeathAnim; startTime: number }[]>([]);
+  const playerDeathRef = useRef<{ startTime: number } | null>(null);
   const pendingItemsRef = useRef<Map<number, number>>(new Map()); // itemId → visibleAt
 
   // Keep callback refs fresh
@@ -148,8 +167,16 @@ export function GameCanvas({ state, onMove, onSkillSelectReady }: GameCanvasProp
         started: now >= d.startTime,
       }));
       lingeringDeathsRef.current = lingeringDeathsRef.current.filter(
-        d => now < d.startTime + DEATH_DURATION  // keep until burst fully done
+        d => now < d.startTime + DEATH_DURATION
       );
+
+      // Player death burst (independent timer)
+      const playerDeathT = playerDeathRef.current
+        ? Math.min(1, Math.max(0, (now - playerDeathRef.current.startTime) / DEATH_DURATION))
+        : -1;
+      if (playerDeathRef.current && now > playerDeathRef.current.startTime + DEATH_DURATION) {
+        playerDeathRef.current = null;
+      }
 
       // Reveal items whose delay has passed
       const hiddenItemIds = new Set<number>();
@@ -158,7 +185,7 @@ export function GameCanvas({ state, onMove, onSkillSelectReady }: GameCanvasProp
         else pendingItemsRef.current.delete(id);
       }
 
-      renderFrame(canvas, currStateRef.current, diff, t, deathOverlay, effectT, hitFlashT, hiddenItemIds);
+      renderFrame(canvas, currStateRef.current, diff, t, deathOverlay, effectT, hitFlashT, hiddenItemIds, playerDeathT);
 
       const playerHit = diffRef.current?.playerHit ?? false;
 
@@ -183,8 +210,8 @@ export function GameCanvas({ state, onMove, onSkillSelectReady }: GameCanvasProp
         }
       }
 
-      // Keep RAF alive while moving, effects, hit flash, or deaths are still running
-      if (t < 1 || effectT < 1 || (playerHit && hitFlashT < 1) || lingeringDeathsRef.current.length > 0) {
+      // Keep RAF alive while moving, effects, hit flash, deaths, or player death are running
+      if (t < 1 || effectT < 1 || (playerHit && hitFlashT < 1) || lingeringDeathsRef.current.length > 0 || playerDeathRef.current) {
         rafRef.current = requestAnimationFrame(loop);
       }
     };
@@ -204,7 +231,7 @@ export function GameCanvas({ state, onMove, onSkillSelectReady }: GameCanvasProp
     currStateRef.current = curr;
 
     const wasPlaying = prev.phase === 'playing';
-    const isPlayingOrSkillSelect = curr.phase === 'playing' || curr.phase === 'skill_select';
+    const isPlayingOrSkillSelect = curr.phase === 'playing' || curr.phase === 'skill_select' || curr.phase === 'game_over';
     if (wasPlaying && isPlayingOrSkillSelect) {
       const newDiff = buildAnimDiff(prev, curr);
       const deathStart = Date.now() + TICK_DURATION + AFTER_MOVE_DELAY + EFFECT_DURATION;
@@ -214,6 +241,10 @@ export function GameCanvas({ state, onMove, onSkillSelectReady }: GameCanvasProp
           ...lingeringDeathsRef.current,
           ...newDiff.deaths.map(death => ({ death, startTime: deathStart })),
         ];
+      }
+      // Start player death burst when player died this tick
+      if (newDiff.playerDied) {
+        playerDeathRef.current = { startTime: deathStart };
       }
       // Delay newly dropped items until after the death burst starts
       const prevItemIds = new Set(prev.items.map(i => i.id));
@@ -230,6 +261,7 @@ export function GameCanvas({ state, onMove, onSkillSelectReady }: GameCanvasProp
     } else {
       // For overlays (game_over, etc.) jump straight to final state
       lingeringDeathsRef.current = [];
+      playerDeathRef.current = null;
       pendingItemsRef.current.clear();
       pendingSkillSelectRef.current = false;
       diffRef.current = null;

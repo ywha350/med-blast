@@ -16,13 +16,13 @@ function times(
 }
 
 export const ALL_SKILLS: Skill[] = [
-  ...times(5, 'first_aid',     'First Aid',  'Heal 1 HP and gain 1 max HP',               'Survival',
+  ...times(3, 'first_aid',     'First Aid',  'Heal 1 HP and gain 1 max HP',               'Survival',
     (p) => ({ ...p, maxHp: p.maxHp + 1, hp: Math.min(p.hp + 1, p.maxHp + 1) })),
-  ...times(3, 'atk_up',        'Sharpened',  'Attack +1',                                  'Attack',
+  ...times(1, 'atk_up',        'Power Up',   'Attack +1',                                 'Attack',
     (p) => ({ ...p, attack: p.attack + 1 })),
-  ...times(3, 'range_up',      'Long Reach', 'Attack range +1 tile',                       'Attack',
+  ...times(3, 'range_up',      'Long Reach', 'Attack range +1 tile',                      'Attack',
     (p) => ({ ...p, attackRange: p.attackRange + 1 })),
-  ...times(4, 'multi_target',  'Spread',     'Attack one additional enemy per turn',       'Attack',
+  ...times(2, 'multi_target',  'Spread',     'Attack one additional enemy per turn',       'Attack',
     (p) => ({ ...p, attackTargets: Math.min(p.attackTargets + 1, 6) })),
   {
     id: 'antiseptic',
@@ -43,7 +43,7 @@ export const ALL_SKILLS: Skill[] = [
     name: 'Contagion',
     description: 'Hitting an enemy also damages the nearest adjacent enemy',
     category: 'Special',
-    apply: (p) => ({ ...p, chainAttack: true }),
+    apply: (p) => ({ ...p, chainAttack: 1 }),
   },
   {
     id: 'revive',
@@ -62,10 +62,14 @@ export const ALL_SKILLS: Skill[] = [
 ];
 
 export function pickRandomSkills(count: number, excludeIds: string[]): Skill[] {
-  const pool = ALL_SKILLS.filter(s => !excludeIds.includes(s.id));
+  const selected = new Set(excludeIds);
+  const pool = ALL_SKILLS.filter(s =>
+    !selected.has(s.id) &&
+    (s.requires === undefined || selected.has(s.requires))
+  );
   return [...pool].sort(() => Math.random() - 0.5).slice(0, count);
 }
 
 export function getExpThresholds(maxLevel: number): number[] {
-  return Array.from({ length: maxLevel }, (_, i) => Math.round(5 * (i + 1) * (i + 2)));
+  return Array.from({ length: maxLevel }, (_, i) => Math.round(20 * (i + 1) * (i + 2)));
 }

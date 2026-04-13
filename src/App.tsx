@@ -7,6 +7,7 @@ import { GameCanvas } from './components/GameCanvas';
 import { HUD } from './components/HUD';
 import { SkillSelect } from './components/SkillSelect';
 import { GameOver } from './components/GameOver';
+import { TICK_DURATION, AFTER_MOVE_DELAY, EFFECT_DURATION, HIT_FLASH_DURATION, DEATH_DURATION } from './game/animTypes';
 
 type Action =
   | { type: 'START' }
@@ -35,6 +36,25 @@ export default function App() {
   const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
   useGameAudio(state);
   const [showSkillSelect, setShowSkillSelect] = useState(false);
+  const [displayTime, setDisplayTime] = useState(0);
+  const [showGameOver, setShowGameOver] = useState(false);
+
+  useEffect(() => {
+    if (state.phase !== 'playing') return;
+    setDisplayTime(Date.now() - state.startTime);
+    const id = setInterval(() => setDisplayTime(Date.now() - state.startTime), 1000);
+    return () => clearInterval(id);
+  }, [state.phase, state.startTime]);
+
+  useEffect(() => {
+    if (state.phase === 'game_over') {
+      const delay = TICK_DURATION + AFTER_MOVE_DELAY + EFFECT_DURATION + HIT_FLASH_DURATION + DEATH_DURATION;
+      const id = setTimeout(() => setShowGameOver(true), delay);
+      return () => clearTimeout(id);
+    } else {
+      setShowGameOver(false);
+    }
+  }, [state.phase]);
 
   // Reset overlay when leaving skill_select phase
   useEffect(() => {
@@ -61,7 +81,7 @@ export default function App() {
     );
   }
 
-  const score = calcScore(state.tick);
+  const score = calcScore(state);
 
   return (
     <div className="app">
@@ -71,6 +91,7 @@ export default function App() {
           kills={state.kills}
           level={state.player.level}
           score={score}
+          elapsedTime={displayTime}
         />
         <div className="canvas-container">
           <GameCanvas state={state} onMove={handleMove} onSkillSelectReady={() => setShowSkillSelect(true)} />
@@ -81,12 +102,13 @@ export default function App() {
               onSelect={handleSelectSkill}
             />
           )}
-          {state.phase === 'game_over' && (
+          {showGameOver && (
             <GameOver
               score={score}
               kills={state.kills}
               level={state.player.level}
               bestScore={state.bestScore}
+              elapsedTime={state.elapsedTime}
               onRestart={() => dispatch({ type: 'RESTART' })}
               onTitle={() => dispatch({ type: 'TITLE' })}
             />

@@ -3,15 +3,13 @@ import {
   DamageNumber, ItemType, EnemyType, Projectile, Trace
 } from './types';
 import { pickRandomSkills, getExpThresholds } from './skills';
+import {
+  ENEMY_STATS, SPAWN, BOSS_HP_SCALE, BOSS_BURST_MOVES, ENEMY_SHIELD_CHANCE,
+  pickEnemyType, getSpawnInterval,
+} from './waves';
 
 const VIEWPORT_HALF = 7;
 const SPAWN_MARGIN = 1;
-const BASE_SPAWN_INTERVAL = 4;
-const RANGED_FIRE_INTERVAL = 4;
-const BOSS_FIRE_INTERVAL = 8;
-const PROJECTILE_LIFESPAN = 10;
-const BOSS_SPAWN_INTERVAL = 150;
-const BOSS_TRACE_DURATION = 3;
 
 export function createInitialState(): GameState {
   return {
@@ -37,6 +35,9 @@ export function createInitialState(): GameState {
     hitFlashTick: 0,
     traces: [],
     nextTraceId: 1,
+    bossesSpawned: 0,
+    tilesWalked: 0,
+    shockerPositions: [],
   };
 }
 
@@ -51,13 +52,13 @@ function createPlayer(): Player {
     level: 1,
     expThresholds: getExpThresholds(50),
     attackTargets: 1,
-    attackRange: 2,
+    attackRange: 3,
     piercing: false,
     bulletCount: 0,
     expMultiplier: 1,
     dropRateBonus: 0,
     counterAttack: false,
-    chainAttack: false,
+    chainAttack: 0,
     hasRevive: false,
     shieldActive: false,
     attackBoostCharges: 0,
@@ -82,8 +83,8 @@ export function startGame(state: GameState): GameState {
   };
 }
 
-export function calcScore(tick: number): number {
-  return tick;
+export function calcScore(state: { tilesWalked: number; player: { exp: number } }): number {
+  return state.tilesWalked + state.player.exp;
 }
 
 function manDist(a: Position, b: Position): number {
@@ -94,8 +95,27 @@ function posEq(a: Position, b: Position): boolean {
   return a.x === b.x && a.y === b.y;
 }
 
+/** Returns all 4 tiles occupied by a 2×2 abnormal enemy (top-left corner = pos). */
+export function abnormalTiles(pos: Position): Position[] {
+  return [pos, { x: pos.x + 1, y: pos.y }, { x: pos.x, y: pos.y + 1 }, { x: pos.x + 1, y: pos.y + 1 }];
+}
+
+function isTileBlockedByAbnormal(pos: Position, enemies: Enemy[], excludeId?: number): boolean {
+  return enemies.some(e =>
+    e.type === 'abnormal' && e.id !== excludeId &&
+    abnormalTiles(e.pos).some(t => posEq(t, pos))
+  );
+}
+
+function abnormalFootprintFree(topLeft: Position, enemies: Enemy[], excludeId?: number): boolean {
+  return abnormalTiles(topLeft).every(t =>
+    !enemies.some(e => e.id !== excludeId && (posEq(e.pos, t) || isTileBlockedByAbnormal(t, enemies, excludeId)))
+  );
+}
+
 function isOccupiedByEnemy(pos: Position, enemies: Enemy[], excludeId?: number): boolean {
-  return enemies.some(e => e.id !== excludeId && posEq(e.pos, pos));
+  return enemies.some(e => e.id !== excludeId && posEq(e.pos, pos))
+      || isTileBlockedByAbnormal(pos, enemies, excludeId);
 }
 
 function playerMovingToward(player: Player, enemy: Enemy): boolean {
@@ -125,12 +145,13 @@ function moveEnemyTowardPlayer(enemy: Enemy, player: Player, enemies: Enemy[]): 
     if (dx !== 0) moves.push({ x: enemy.pos.x + Math.sign(dx), y: enemy.pos.y });
   }
 
-  const perp: Position[] = [
-    { x: enemy.pos.x + 1, y: enemy.pos.y },
-    { x: enemy.pos.x - 1, y: enemy.pos.y },
-    { x: enemy.pos.x, y: enemy.pos.y + 1 },
-    { x: enemy.pos.x, y: enemy.pos.y - 1 },
-  ].filter(p => !moves.some(m => posEq(m, p)));
+  // Strictly perpendicular slides — never retreat toward/away from player
+  const perp: Position[] = Math.abs(dx) >= Math.abs(dy)
+    ? [{ x: enemy.pos.x, y: enemy.pos.y + 1 }, { x: enemy.pos.x, y: enemy.pos.y - 1 }]
+    : [{ x: enemy.pos.x + 1, y: enemy.pos.y }, { x: enemy.pos.x - 1, y: enemy.pos.y }];
+
+  if (manDist(player.pos, enemy.pos) === 1) {moves.length = 0; perp.length = 0;} // Don't move if already adjacent — wait for player to come to us
+
 
   for (const move of [...moves, ...perp]) {
     if (!posEq(move, player.pos) && !isOccupiedByEnemy(move, enemies, enemy.id)) return move;
@@ -165,6 +186,33 @@ function moveRangedEnemy(enemy: Enemy, player: Player, enemies: Enemy[]): Positi
   return enemy.pos; // hover
 }
 
+function moveAbnormalTowardPlayer(enemy: Enemy, player: Player, enemies: Enemy[]): Position {
+  // Adjacent if any of the 4 tiles is within manDist 1 of player
+  const alreadyAdj = abnormalTiles(enemy.pos).some(t => manDist(t, player.pos) <= 1);
+  if (alreadyAdj) return enemy.pos;
+
+  const dx = player.pos.x - enemy.pos.x;
+  const dy = player.pos.y - enemy.pos.y;
+
+  const moves: Position[] = [];
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    if (dx !== 0) moves.push({ x: enemy.pos.x + Math.sign(dx), y: enemy.pos.y });
+    if (dy !== 0) moves.push({ x: enemy.pos.x, y: enemy.pos.y + Math.sign(dy) });
+  } else {
+    if (dy !== 0) moves.push({ x: enemy.pos.x, y: enemy.pos.y + Math.sign(dy) });
+    if (dx !== 0) moves.push({ x: enemy.pos.x + Math.sign(dx), y: enemy.pos.y });
+  }
+
+  const perp: Position[] = Math.abs(dx) >= Math.abs(dy)
+    ? [{ x: enemy.pos.x, y: enemy.pos.y + 1 }, { x: enemy.pos.x, y: enemy.pos.y - 1 }]
+    : [{ x: enemy.pos.x + 1, y: enemy.pos.y }, { x: enemy.pos.x - 1, y: enemy.pos.y }];
+
+  for (const move of [...moves, ...perp]) {
+    if (!posEq(move, player.pos) && abnormalFootprintFree(move, enemies, enemy.id)) return move;
+  }
+  return enemy.pos;
+}
+
 function edgeSpawnPos(px: number, py: number): Position {
   const vp = VIEWPORT_HALF + SPAWN_MARGIN;
   const spread = rng(2 * vp + 1) - vp;
@@ -190,18 +238,24 @@ function dirSpawnPos(px: number, py: number, dir: Direction): Position {
 function spawnEnemy(state: GameState, forceType?: EnemyType): GameState {
   const { pos: { x: px, y: py } } = state.player;
   const spawnPos = edgeSpawnPos(px, py);
-  if (isOccupiedByEnemy(spawnPos, state.enemies)) return state;
-  const wave = Math.floor(state.tick / 60);
+  const wave = Math.floor(state.tick / SPAWN.waveLength);
   const type = forceType ?? pickEnemyType(wave);
-  const enemy = buildEnemy(state.nextEnemyId, spawnPos, type, wave);
-  return { ...state, enemies: [...state.enemies, enemy], nextEnemyId: state.nextEnemyId + 1 };
+  if (type === 'abnormal') {
+    if (!abnormalFootprintFree(spawnPos, state.enemies)) return state;
+  } else {
+    if (isOccupiedByEnemy(spawnPos, state.enemies)) return state;
+  }
+  const bossLevel = type === 'boss' ? state.bossesSpawned + 1 : undefined;
+  const enemy = buildEnemy(state.nextEnemyId, spawnPos, type, wave, bossLevel);
+  const bossesSpawned = type === 'boss' ? state.bossesSpawned + 1 : state.bossesSpawned;
+  return { ...state, enemies: [...state.enemies, enemy], nextEnemyId: state.nextEnemyId + 1, bossesSpawned };
 }
 
 function spawnEnemyInDirection(state: GameState, dir: Direction): GameState {
   const { pos: { x: px, y: py } } = state.player;
   const spawnPos = dirSpawnPos(px, py, dir);
   if (isOccupiedByEnemy(spawnPos, state.enemies)) return state;
-  const wave = Math.floor(state.tick / 60);
+  const wave = Math.floor(state.tick / SPAWN.waveLength);
   const enemy = buildEnemy(state.nextEnemyId, spawnPos, pickEnemyType(wave), wave);
   return { ...state, enemies: [...state.enemies, enemy], nextEnemyId: state.nextEnemyId + 1 };
 }
@@ -224,63 +278,19 @@ function tryDrop(pos: Position, dropChance: number, nextItemId: number) {
   return { id: nextItemId, pos: { ...pos }, type: ITEM_TYPES[rng(ITEM_TYPES.length)] };
 }
 
-function buildEnemy(id: number, pos: Position, type: EnemyType, wave: number): Enemy {
+function buildEnemy(id: number, pos: Position, type: EnemyType, wave: number, bossLevel?: number): Enemy {
   const stats = ENEMY_STATS[type];
-  const hpBonus = type === 'boss' ? Math.floor(wave / 3) * 5 : Math.floor(wave / 2);
-  const hp = stats.hp + hpBonus;
-  return { id, pos, hp, maxHp: hp, exp: stats.exp, type, fireCooldown: 0 };
-}
-
-const ENEMY_STATS: Record<EnemyType, { hp: number; exp: number }> = {
-  normal: { hp: 1,  exp: 1  },
-  speedy: { hp: 1,  exp: 2  },
-  tanker: { hp: 4,  exp: 3  },
-  ranged: { hp: 1,  exp: 2  },
-  boss:   { hp: 15, exp: 15 },
-};
-
-function pickEnemyType(wave: number): EnemyType {
-  const r = Math.random();
-  switch (wave) {
-    case 0: // normals only, hint of speedy
-      return r < 0.15 ? 'speedy' : 'normal';
-    case 1: // speedies join
-      if (r < 0.30) return 'speedy';
-      return 'normal';
-    case 2: // tankers arrive
-      if (r < 0.25) return 'speedy';
-      if (r < 0.45) return 'tanker';
-      return 'normal';
-    case 3: // ranged arrive
-      if (r < 0.20) return 'speedy';
-      if (r < 0.38) return 'tanker';
-      if (r < 0.58) return 'ranged';
-      return 'normal';
-    case 4: // tanker-heavy wave
-      if (r < 0.15) return 'speedy';
-      if (r < 0.50) return 'tanker';
-      if (r < 0.65) return 'ranged';
-      return 'normal';
-    case 5: // ranged-heavy wave
-      if (r < 0.15) return 'speedy';
-      if (r < 0.30) return 'tanker';
-      if (r < 0.65) return 'ranged';
-      return 'normal';
-    case 6: // speedy swarm
-      if (r < 0.55) return 'speedy';
-      if (r < 0.70) return 'tanker';
-      if (r < 0.80) return 'ranged';
-      return 'normal';
-    default: // wave 7+ — everything maxed
-      if (r < 0.22) return 'speedy';
-      if (r < 0.42) return 'tanker';
-      if (r < 0.62) return 'ranged';
-      return 'normal';
-  }
-}
-
-function getSpawnInterval(tick: number): number {
-  return Math.max(1, BASE_SPAWN_INTERVAL - Math.floor(tick / 30));
+  const hp = stats.hp + (type === 'boss' ? wave * BOSS_HP_SCALE : 0);
+  const exp = type === 'boss' ? hp * 2 : stats.exp;
+  const burstMovesLeft = (type === 'boss' && (bossLevel ?? 1) >= 4) ? BOSS_BURST_MOVES : undefined;
+  const shield = Math.random() < ENEMY_SHIELD_CHANCE ? true : undefined;
+  return {
+    id, pos, hp, maxHp: hp, exp, type, fireCooldown: 0, bossLevel, burstMovesLeft,
+    hidden: type === 'assassin' ? false : undefined,
+    assassinMoves: type === 'assassin' ? 2 : undefined,
+    size: type === 'abnormal' ? 2 : undefined,
+    shield,
+  };
 }
 
 // ── Ranged: fire projectile toward player ────────────────────────────────────
@@ -293,7 +303,8 @@ function fireProjectile(enemy: Enemy, player: Player, state: GameState): { proje
     pos: { ...enemy.pos },
     dx: Math.abs(player.pos.x - enemy.pos.x) >= Math.abs(player.pos.y - enemy.pos.y) ? dx : 0,
     dy: Math.abs(player.pos.x - enemy.pos.x) >= Math.abs(player.pos.y - enemy.pos.y) ? 0 : dy,
-    ticksLeft: PROJECTILE_LIFESPAN,
+    ticksLeft: SPAWN.projectileLifespan,
+    fromBoss: enemy.type === 'boss',
   };
   return {
     projectiles: [...state.projectiles, proj],
@@ -311,7 +322,7 @@ export function processTick(state: GameState, dir: Direction): GameState {
   // Move player — blocked if an enemy occupies the target tile
   const targetPos = moveInDir(s.player.pos, dir);
   const blocked = isOccupiedByEnemy(targetPos, s.enemies);
-  s = { ...s, player: { ...s.player, pos: blocked ? s.player.pos : targetPos, lastDir: dir } };
+  s = { ...s, player: { ...s.player, pos: blocked ? s.player.pos : targetPos, lastDir: dir }, tilesWalked: s.tilesWalked + (blocked ? 0 : 1) };
 
   // Repeated direction → spawn an enemy in that direction
   if (state.player.lastDir === dir) s = spawnEnemyInDirection(s, dir);
@@ -355,7 +366,7 @@ export function processTick(state: GameState, dir: Direction): GameState {
   if (visibleCount < MAX_ENEMIES && s.tick % interval === 0) s = spawnEnemy(s);
   if (visibleCount < MAX_ENEMIES && s.tick % (interval * 2) === 0) s = spawnEnemy(s);
   // Boss spawn
-  if (s.tick > 0 && s.tick % BOSS_SPAWN_INTERVAL === 0) s = spawnEnemy(s, 'boss');
+  if (s.tick > 0 && s.tick % SPAWN.bossEvery === 0) s = spawnEnemy(s, 'boss');
 
   // ── Move enemies ────────────────────────────────────────────────────────
   let projectiles = [...s.projectiles];
@@ -364,59 +375,122 @@ export function processTick(state: GameState, dir: Direction): GameState {
   let nextTraceId = s.nextTraceId;
 
   // Build moves sequentially so each enemy sees already-committed positions
+  const shockerFiredAt: Position[] = [];
   const movedEnemies: Enemy[] = [];
   for (const enemy of s.enemies) {
     let moved = enemy;
 
-    // Movement rhythm:
-    //   speedy  → every tick
-    //   normal, ranged, boss, tanker → every 2 ticks (tick % 2 === 1)
+    // An enemy with interval N moves when tick % N === N-1.
     // Pass movedEnemies (already committed) so no two enemies share a tile.
+    const interval = ENEMY_STATS[enemy.type].interval;
+    const takesStep = s.tick % interval === interval - 1;
+
     switch (enemy.type) {
       case 'speedy':
         moved = { ...enemy, pos: moveEnemyTowardPlayer(enemy, s.player, movedEnemies) };
         break;
+      case 'tracer': {
+        const tracerNewPos = moveEnemyTowardPlayer(enemy, s.player, movedEnemies);
+        if (!posEq(tracerNewPos, enemy.pos) && !traces.some(t => posEq(t.pos, enemy.pos))) {
+          traces.push({ id: nextTraceId++, pos: { ...enemy.pos }, ticksLeft: SPAWN.bossTraceDuration } as Trace);
+        }
+        moved = { ...enemy, pos: tracerNewPos };
+        break;
+      }
       case 'normal':
       case 'tanker':
-        if (s.tick % 2 !== 1) { moved = enemy; break; }
+        if (!takesStep) { moved = enemy; break; }
         moved = { ...enemy, pos: moveEnemyTowardPlayer(enemy, s.player, movedEnemies) };
         break;
       case 'boss': {
-        if (s.tick % 2 !== 1) { moved = enemy; break; }
-        const bossNewPos = moveEnemyTowardPlayer(enemy, s.player, movedEnemies);
-        // Leave a trace on the tile the boss vacated
-        if (!posEq(bossNewPos, enemy.pos) && !traces.some(t => posEq(t.pos, enemy.pos))) {
-          traces.push({ id: nextTraceId++, pos: { ...enemy.pos }, ticksLeft: BOSS_TRACE_DURATION } as Trace);
+        const bossLevel = enemy.bossLevel ?? 1;
+        const canFire  = bossLevel >= 2;
+        const canTrace = bossLevel >= 3;
+
+        if (bossLevel >= 4) {
+          // ── 4th boss: burst pattern (BOSS_BURST_MOVES steps, then 1 rest tick) ──
+          const burst = enemy.burstMovesLeft ?? BOSS_BURST_MOVES;
+          if (burst === 0) {
+            moved = { ...enemy, burstMovesLeft: BOSS_BURST_MOVES };
+            break;
+          }
+          const bossNewPos = moveEnemyTowardPlayer(enemy, s.player, movedEnemies);
+          if (canTrace && !posEq(bossNewPos, enemy.pos) && !traces.some(t => posEq(t.pos, enemy.pos))) {
+            traces.push({ id: nextTraceId++, pos: { ...enemy.pos }, ticksLeft: SPAWN.bossTraceDuration } as Trace);
+          }
+          let bossCooldown = Math.max(0, enemy.fireCooldown - 1);
+          if (canFire && bossCooldown === 0 && manDist(enemy.pos, s.player.pos) <= 10) {
+            const fired = fireProjectile(enemy, s.player, { ...s, projectiles, nextProjectileId });
+            projectiles = fired.projectiles;
+            nextProjectileId = fired.nextId;
+            bossCooldown = SPAWN.bossFire;
+          }
+          moved = { ...enemy, pos: bossNewPos, fireCooldown: bossCooldown, burstMovesLeft: burst - 1 };
+          break;
         }
-        // Boss fires at player
+
+        // ── Boss levels 1–3: move on interval ───────────────────────────────
+        if (!takesStep) { moved = enemy; break; }
+        const bossNewPos = moveEnemyTowardPlayer(enemy, s.player, movedEnemies);
+        if (canTrace && !posEq(bossNewPos, enemy.pos) && !traces.some(t => posEq(t.pos, enemy.pos))) {
+          traces.push({ id: nextTraceId++, pos: { ...enemy.pos }, ticksLeft: SPAWN.bossTraceDuration } as Trace);
+        }
         let bossCooldown = Math.max(0, enemy.fireCooldown - 1);
-        if (bossCooldown === 0 && manDist(enemy.pos, s.player.pos) <= 10) {
+        if (canFire && bossCooldown === 0 && manDist(enemy.pos, s.player.pos) <= 10) {
           const fired = fireProjectile(enemy, s.player, { ...s, projectiles, nextProjectileId });
           projectiles = fired.projectiles;
           nextProjectileId = fired.nextId;
-          bossCooldown = BOSS_FIRE_INTERVAL;
+          bossCooldown = SPAWN.bossFire;
         }
         moved = { ...enemy, pos: bossNewPos, fireCooldown: bossCooldown };
         break;
       }
       case 'ranged': {
-        const willMove = s.tick % 2 === 1;
-        const newPos = willMove ? moveRangedEnemy(enemy, s.player, movedEnemies) : enemy.pos;
+        const newPos = takesStep ? moveRangedEnemy(enemy, s.player, movedEnemies) : enemy.pos;
         let cooldown = Math.max(0, enemy.fireCooldown - 1);
-        if (willMove && cooldown === 0 && manDist(enemy.pos, s.player.pos) <= 6) {
+        if (takesStep && cooldown === 0 && manDist(enemy.pos, s.player.pos) <= 6) {
           const fired = fireProjectile(enemy, s.player, { ...s, projectiles, nextProjectileId });
           projectiles = fired.projectiles;
           nextProjectileId = fired.nextId;
-          cooldown = RANGED_FIRE_INTERVAL;
+          cooldown = SPAWN.rangedFire;
         }
         moved = { ...enemy, pos: newPos, fireCooldown: cooldown };
+        break;
+      }
+      case 'abnormal': {
+        if (!takesStep) { moved = enemy; break; }
+        moved = { ...enemy, pos: moveAbnormalTowardPlayer(enemy, s.player, movedEnemies) };
+        break;
+      }
+      case 'assassin': {
+        if (enemy.hidden) {
+          // Hiding tick: stay still, reveal for next cycle
+          moved = { ...enemy, hidden: false, assassinMoves: 2 };
+          break;
+        }
+        const assassinNewPos = moveEnemyTowardPlayer(enemy, s.player, movedEnemies);
+        const movesLeft = (enemy.assassinMoves ?? 2) - 1;
+        if (movesLeft <= 0) {
+          moved = { ...enemy, pos: assassinNewPos, hidden: true, assassinMoves: 0 };
+        } else {
+          moved = { ...enemy, pos: assassinNewPos, assassinMoves: movesLeft };
+        }
+        break;
+      }
+      case 'shocker': {
+        if (!takesStep) { moved = enemy; break; }
+        const shockerNewPos = moveEnemyTowardPlayer(enemy, s.player, movedEnemies);
+        if (!posEq(shockerNewPos, enemy.pos)) {
+          shockerFiredAt.push(shockerNewPos);
+        }
+        moved = { ...enemy, pos: shockerNewPos };
         break;
       }
     }
     movedEnemies.push(moved);
   }
 
-  s = { ...s, enemies: movedEnemies, projectiles, nextProjectileId, traces, nextTraceId };
+  s = { ...s, enemies: movedEnemies, projectiles, nextProjectileId, traces, nextTraceId, shockerPositions: shockerFiredAt };
 
   // ── Move projectiles & check player collision ────────────────────────────
   const movedProjs: Projectile[] = [];
@@ -479,7 +553,12 @@ function performAttack(state: GameState): GameState {
   const newItems = [...items];
   const dmgNums = [...state.damageNumbers];
 
-  const distMap = new Map(enemies.map(e => [e.id, manDist(e.pos, player.pos)]));
+  const distMap = new Map(enemies.map(e => [
+    e.id,
+    e.type === 'abnormal'
+      ? Math.min(...abnormalTiles(e.pos).map(t => manDist(t, player.pos)))
+      : manDist(e.pos, player.pos),
+  ]));
   const inRange = enemies
     .filter(e => (distMap.get(e.id) ?? Infinity) <= player.attackRange)
     .sort((a, b) => (distMap.get(a.id) ?? 0) - (distMap.get(b.id) ?? 0));
@@ -497,7 +576,9 @@ function performAttack(state: GameState): GameState {
     for (const [dx, dy] of dirs) {
       for (let d = 1; d <= player.attackRange; d++) {
         const p = { x: player.pos.x + dx * d, y: player.pos.y + dy * d };
-        const hit = inRange.find(e => posEq(e.pos, p) && !targetSet.has(e.id));
+        const hit = inRange.find(e => !targetSet.has(e.id) && (
+          e.type === 'abnormal' ? abnormalTiles(e.pos).some(t => posEq(t, p)) : posEq(e.pos, p)
+        ));
         if (hit) { targets.push(hit); targetSet.add(hit.id); break; }
       }
     }
@@ -518,8 +599,15 @@ function performAttack(state: GameState): GameState {
     const idx = idxMap.get(id);
     if (idx === undefined) return;
     const e = updated[idx];
+    if (e.shield) {
+      updated[idx] = { ...e, shield: undefined };
+      return;
+    }
     const newHp = e.hp - dmg;
-    dmgNums.push(mkDmg(nextDmgId++, e.pos, dmg, state.tick, false, { victimId: e.id, isChain: isChain || undefined }));
+    const dmgPos = e.type === 'abnormal'
+      ? abnormalTiles(e.pos).reduce((best, t) => manDist(t, player.pos) < manDist(best, player.pos) ? t : best)
+      : e.pos;
+    dmgNums.push(mkDmg(nextDmgId++, dmgPos, dmg, state.tick, false, { victimId: e.id, isChain: isChain || undefined }));
     if (newHp <= 0) {
       dead.add(e.id);
       kills += 1;
@@ -535,11 +623,17 @@ function performAttack(state: GameState): GameState {
     applyDamage(target.id, damage);
     if (boostCharges > 0) boostCharges--;
 
-    if (player.chainAttack) {
-      const chainTarget = updated
-        .filter(ce => !dead.has(ce.id) && !targetIds.has(ce.id) && ce.id !== target.id && manDist(ce.pos, target.pos) <= 1)
-        .sort((a, b) => (distMap.get(a.id) ?? 0) - (distMap.get(b.id) ?? 0))[0];
-      if (chainTarget) applyDamage(chainTarget.id, damage, true);
+    if (player.chainAttack > 0) {
+      const chainTargets = updated
+        .filter(ce => {
+          if (dead.has(ce.id) || targetIds.has(ce.id) || ce.id === target.id) return false;
+          const ceTiles  = ce.type     === 'abnormal' ? abnormalTiles(ce.pos)     : [ce.pos];
+          const tgtTiles = target.type === 'abnormal' ? abnormalTiles(target.pos) : [target.pos];
+          return ceTiles.some(ct => tgtTiles.some(tt => manDist(ct, tt) <= 1));
+        })
+        .sort((a, b) => (distMap.get(a.id) ?? 0) - (distMap.get(b.id) ?? 0))
+        .slice(0, player.chainAttack);
+      for (const ct of chainTargets) applyDamage(ct.id, damage, true);
     }
   }
 
@@ -556,13 +650,27 @@ function performAttack(state: GameState): GameState {
   };
 }
 
+const CROSS_DIRS = [{ x: 0, y: -1 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 1, y: 0 }];
+
 function checkCollision(state: GameState, alsoHitByProjectile: boolean): GameState {
   let { player, enemies } = state;
   let nextDmgId = state.nextDmgId;
   const dmgNums = [...state.damageNumbers];
 
-  const adjacentEnemy = enemies.find(e => manDist(e.pos, player.pos) <= 1);
-  const tookHit = adjacentEnemy !== undefined || alsoHitByProjectile;
+  const adjacentEnemies = enemies.filter(e => {
+    if (e.hidden) return false;
+    if (e.type === 'abnormal') {
+      return abnormalTiles(e.pos).some(t => manDist(t, player.pos) <= 1);
+    }
+    return manDist(e.pos, player.pos) <= 1;
+  });
+
+  // Shocker shockwave hits: cross tiles at distance 1 from each shocker's fired position
+  const shockerHits = state.shockerPositions.filter(sp =>
+    CROSS_DIRS.some(d => posEq({ x: sp.x + d.x, y: sp.y + d.y }, player.pos))
+  ).length;
+
+  const tookHit = adjacentEnemies.length > 0 || alsoHitByProjectile || shockerHits > 0;
 
   if (!tookHit) return state;
 
@@ -570,13 +678,15 @@ function checkCollision(state: GameState, alsoHitByProjectile: boolean): GameSta
     return { ...state, player: { ...player, shieldActive: false } };
   }
 
-  player = { ...player, hp: player.hp - 1 };
-  dmgNums.push(mkDmg(nextDmgId++, player.pos, 1, state.tick, true));
+  const hitCount = adjacentEnemies.length + (alsoHitByProjectile ? 1 : 0) + shockerHits;
+  player = { ...player, hp: player.hp - hitCount };
+  dmgNums.push(mkDmg(nextDmgId++, player.pos, hitCount, state.tick, true));
 
+  const adjacentIds = new Set(adjacentEnemies.map(e => e.id));
   let updatedEnemies = [...enemies];
   if (player.counterAttack) {
     updatedEnemies = updatedEnemies
-      .map(e => manDist(e.pos, player.pos) <= 1 ? { ...e, hp: e.hp - 1 } : e)
+      .map(e => adjacentIds.has(e.id) ? { ...e, hp: e.hp - 1 } : e)
       .filter(e => e.hp > 0);
   }
 
@@ -632,7 +742,7 @@ export function applySkill(state: GameState, skillId: string): GameState {
 
 function endGame(state: GameState): GameState {
   const elapsed = Date.now() - state.startTime;
-  const score = calcScore(state.tick);
+  const score = calcScore(state);
   const bestScore = Math.max(score, state.bestScore);
   try {
     localStorage.setItem('gridRogue_lastScore', score.toString());
@@ -646,9 +756,11 @@ export function restartGame(state: GameState): GameState {
 }
 
 /** Returns true if this enemy type will move on the NEXT player step.
- *  Enemies (except speedy) act when tick%2===1. After this tick (currentTick),
- *  the next tick = currentTick+1, which is odd when currentTick is even. */
-export function enemyMovesNextTick(type: EnemyType, currentTick: number): boolean {
-  if (type === 'speedy') return true;
-  return currentTick % 2 === 0;
+ *  An enemy with interval N moves when tick % N === N-1, so it moves next tick
+ *  when currentTick % N === N-2. */
+export function enemyMovesNextTick(type: EnemyType, currentTick: number, burstMovesLeft?: number): boolean {
+  const interval = ENEMY_STATS[type].interval;
+  if (interval === 1) return true;
+  if (type === 'boss' && burstMovesLeft !== undefined) return burstMovesLeft > 0;
+  return currentTick % interval === interval - 2;
 }

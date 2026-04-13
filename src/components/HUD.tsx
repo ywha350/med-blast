@@ -1,4 +1,4 @@
-import { Heart, Zap, Crosshair, Trophy } from 'lucide-react';
+import { Heart, Zap, Crosshair, Trophy, Timer } from 'lucide-react';
 import { Player } from '../game/types';
 
 interface HUDProps {
@@ -6,11 +6,19 @@ interface HUDProps {
   kills: number;
   level: number;
   score: number;
+  elapsedTime: number;
 }
 
-export function HUD({ player, kills, level, score }: HUDProps) {
-  const expThreshold = player.expThresholds[player.level - 1] ?? 999;
-  const expPct = Math.min(1, player.exp / expThreshold);
+function formatTime(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
+}
+
+export function HUD({ player, kills, level, score, elapsedTime }: HUDProps) {
+  const prevThreshold = player.expThresholds[player.level - 2] ?? 0;
+  const nextThreshold = player.expThresholds[player.level - 1] ?? 999;
+  const expPct = Math.min(1, (player.exp - prevThreshold) / (nextThreshold - prevThreshold));
 
   return (
     <div className="hud">
@@ -32,6 +40,10 @@ export function HUD({ player, kills, level, score }: HUDProps) {
       </div>
 
       <div className="hud-center">
+        <div className="hud-stat">
+          <Timer size={12} strokeWidth={2} />
+          <span>{formatTime(elapsedTime)}</span>
+        </div>
         <div className="hud-stat">
           <Crosshair size={12} strokeWidth={2} />
           <span>{kills}</span>

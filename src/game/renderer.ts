@@ -11,9 +11,6 @@ const LUNGE_FACTOR    = 0.28;   // how far enemies lunge toward player (in tiles
 const HIT_WINDOW_LO   = 0.1;    // enemy hit-flash start (anim progress)
 const HIT_WINDOW_HI   = 0.55;   // enemy hit-flash end
 const FLASH_ALPHA     = 0.45;   // max alpha of player hit overlay
-const WARN_ARM        = 9;      // corner-bracket arm length (px)
-const WARN_TH         = 3;      // corner-bracket thickness (px)
-const WARN_M          = 1;      // corner-bracket margin (px)
 const TRACE_ALPHA_MIN = 0.12;
 const TRACE_ALPHA_RNG = 0.22;
 const CHAIN_ARM       = 7;      // corner-bracket arm for trace hazard marker
@@ -30,6 +27,10 @@ const C = {
   enemySpeedy:       '#ffd60a', enemySpeedyOutline:  '#b5800a',
   enemyRanged:       '#4cc9f0', enemyRangedOutline:  '#0077a8',
   enemyBoss:         '#e63946', enemyBossOutline:    '#7a0000',
+  enemyTracer:       '#ff6b35', enemyTracerOutline:  '#7a2800',
+  enemyAbnormal:     '#ff8500', enemyAbnormalOutline:'#7a3000',
+  enemyAssassin:     '#b0b8c4', enemyAssassinOutline:'#2d3540',
+  enemyShocker:      '#ffe066', enemyShockerOutline: '#7a6000',
   projectile: '#4cc9f0',
   hpBar: '#e63946',
   attackLine: '#e63946',
@@ -46,11 +47,15 @@ const C = {
 /** Main color for an enemy type — shared by drawing and death effects. */
 function enemyMainColor(type: string): string {
   switch (type) {
-    case 'tanker': return C.enemyTanker;
-    case 'speedy': return C.enemySpeedy;
-    case 'ranged': return C.enemyRanged;
-    case 'boss':   return C.enemyBoss;
-    default:       return C.enemyNormal;
+    case 'tanker':   return C.enemyTanker;
+    case 'speedy':   return C.enemySpeedy;
+    case 'ranged':   return C.enemyRanged;
+    case 'boss':     return C.enemyBoss;
+    case 'tracer':   return C.enemyTracer;
+    case 'abnormal': return C.enemyAbnormal;
+    case 'assassin': return C.enemyAssassin;
+    case 'shocker':  return C.enemyShocker;
+    default:         return C.enemyNormal;
   }
 }
 
@@ -87,9 +92,10 @@ export function renderFrame(
   diff: AnimDiff | null,
   t: number,
   deathOverlay: { death: DeathAnim; t: number; started: boolean }[] = [],
-  effectT = 0,                          // 0→1: attack lines, plays right after movement
-  hitFlashT = 0,                        // 0→1: player hit flash, plays after attack phase
-  hiddenItemIds: ReadonlySet<number> = new Set()  // items not yet revealed (pending drop)
+  effectT = 0,
+  hitFlashT = 0,
+  hiddenItemIds: ReadonlySet<number> = new Set(),
+  playerDeathT = -1,   // -1 = not dying; 0→1 = death burst progress
 ): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -145,19 +151,23 @@ export function renderFrame(
     const lungeMap = new Map(diff.enemyLunges.map(l => [l.id, l]));
     const lungePeak = Math.sin(Math.min(t, 1) * Math.PI) * TILE * LUNGE_FACTOR;
     for (const e of diff.enemies) {
-      const ex = lerp(e.from.x, e.to.x, easedT);
-      const ey = lerp(e.from.y, e.to.y, easedT);
+      // Tracers leave their trace first, then move: hold position for first 40% of tick
+      const moveT = e.type === 'tracer'
+        ? easeOutCubic(Math.max(0, (Math.min(t, 1) - 0.4) / 0.6))
+        : easedT;
+      const ex = lerp(e.from.x, e.to.x, moveT);
+      const ey = lerp(e.from.y, e.to.y, moveT);
       let { sx, sy } = ws(ex, ey);
       const lunge = lungeMap.get(e.id);
       if (lunge) { sx += lunge.dirX * lungePeak; sy += lunge.dirY * lungePeak; }
       if (!inView(sx, sy)) continue;
-      drawEnemy(ctx, sx, sy, e, e.isHit && t > HIT_WINDOW_LO && t < HIT_WINDOW_HI, enemyMovesNextTick(e.type, state.tick));
+      drawEnemy(ctx, sx, sy, e, e.isHit && t > HIT_WINDOW_LO && t < HIT_WINDOW_HI, enemyMovesNextTick(e.type, state.tick, e.burstMovesLeft), Math.min(1, t));
     }
   } else {
     for (const enemy of state.enemies) {
       const { sx, sy } = ws(enemy.pos.x, enemy.pos.y);
       if (!inView(sx, sy)) continue;
-      drawEnemy(ctx, sx, sy, enemy, false, enemyMovesNextTick(enemy.type, state.tick));
+      drawEnemy(ctx, sx, sy, enemy, false, enemyMovesNextTick(enemy.type, state.tick, enemy.burstMovesLeft));
     }
   }
 
@@ -168,7 +178,7 @@ export function renderFrame(
       drawEnemy(ctx, sx, sy, { type: d.type, hp: 1, maxHp: 1 }, false, false);
     } else {
       const { sx, sy } = ws(d.pos.x, d.pos.y);
-      drawDeathEffect(ctx, sx, sy, dt, d.type);
+      drawDeathEffect(ctx, sx, sy, dt, d.type, d.size ?? 1);
     }
   }
 
@@ -187,21 +197,34 @@ export function renderFrame(
     }
   }
 
+  // ── Shocker shockwaves (cross tiles flash, driven by effectT) ─────────
+  if (diff && diff.shockwaves.length > 0 && effectT > 0 && effectT < 1) {
+    for (const sp of diff.shockwaves) {
+      drawShockwave(ctx, sp, ws, effectT);
+    }
+  }
+
   // ── Projectiles (interpolated) ─────────────────────────────────────────
   if (diff) {
     for (const p of diff.projectiles) {
       const { sx, sy } = ws(lerp(p.from.x, p.to.x, easedT), lerp(p.from.y, p.to.y, easedT));
-      drawProjectile(ctx, sx, sy, p.dx, p.dy);
+      drawProjectile(ctx, sx, sy, p.dx, p.dy, p.fromBoss);
     }
   } else {
     for (const p of state.projectiles) {
       const { sx, sy } = ws(p.pos.x, p.pos.y);
-      drawProjectile(ctx, sx, sy, p.dx, p.dy);
+      drawProjectile(ctx, sx, sy, p.dx, p.dy, p.fromBoss);
     }
   }
 
   // ── Player ────────────────────────────────────────────────────────────
-  drawPlayer(ctx, playerSX, playerSY, state.player);
+  if (playerDeathT < 0 || playerDeathT < 0.15) {
+    // Hide player once burst is well underway
+    drawPlayer(ctx, playerSX, playerSY, state.player);
+  }
+  if (playerDeathT >= 0) {
+    drawPlayerDeathEffect(ctx, playerSX, playerSY, playerDeathT);
+  }
 
   // ── Player hit flash overlay (plays after attack phase) ────────────────
   if (diff?.playerHit && hitFlashT > 0 && hitFlashT < 1) {
@@ -303,12 +326,32 @@ function drawPlayer(
 function drawEnemy(
   ctx: CanvasRenderingContext2D,
   sx: number, sy: number,
-  enemy: { type: string; hp: number; maxHp: number },
+  enemy: { type: string; hp: number; maxHp: number; bossLevel?: number; burstMovesLeft?: number; hidden?: boolean; shield?: boolean; assassinAnim?: 'hiding' | 'appearing' },
   isHit: boolean,
-  movesNext: boolean
+  movesNext: boolean,
+  animT = 1,
 ) {
+  if (enemy.hidden && !enemy.assassinAnim) return;
+
+  // Assassin hide/appear: fade + scale
+  const isAssassinAnim = enemy.type === 'assassin' && !!enemy.assassinAnim;
+  const assassinAlpha = enemy.assassinAnim === 'hiding' ? 1 - animT
+                      : enemy.assassinAnim === 'appearing' ? animT
+                      : 1;
+  const assassinScale = enemy.assassinAnim === 'hiding' ? 1 - 0.7 * animT
+                      : enemy.assassinAnim === 'appearing' ? 0.3 + 0.7 * animT
+                      : 1;
+
+  if (isAssassinAnim) {
+    ctx.save();
+    const cx = sx + TILE / 2, cy = sy + TILE / 2;
+    ctx.translate(cx, cy);
+    ctx.scale(assassinScale, assassinScale);
+    ctx.translate(-cx, -cy);
+  }
+
   // Dim + desaturate enemies that are resting this step
-  ctx.globalAlpha = movesNext ? 1 : RESTING_ALPHA;
+  ctx.globalAlpha = (movesNext ? 1 : RESTING_ALPHA) * assassinAlpha;
   ctx.filter = movesNext ? 'none' : 'grayscale(1)';
 
   if (isHit) {
@@ -316,36 +359,44 @@ function drawEnemy(
     ctx.fillRect(sx + 2, sy + 2, TILE - 4, TILE - 4);
   } else {
     switch (enemy.type) {
-      case 'normal':  drawEnemyNormal(ctx, sx, sy); break;
-      case 'tanker':  drawEnemyTanker(ctx, sx, sy); break;
-      case 'speedy':  drawEnemySpeedy(ctx, sx, sy); break;
-      case 'ranged':  drawEnemyRanged(ctx, sx, sy); break;
-      case 'boss':    drawEnemyBoss(ctx, sx, sy);   break;
+      case 'normal':   drawEnemyNormal(ctx, sx, sy); break;
+      case 'tanker':   drawEnemyTanker(ctx, sx, sy); break;
+      case 'speedy':   drawEnemySpeedy(ctx, sx, sy); break;
+      case 'ranged':   drawEnemyRanged(ctx, sx, sy); break;
+      case 'boss':
+        if ((enemy.bossLevel ?? 1) >= 4) drawEnemyBoss4(ctx, sx, sy, enemy.burstMovesLeft ?? 3);
+        else                              drawEnemyBoss(ctx, sx, sy);
+        break;
+      case 'tracer':   drawEnemyTracer(ctx, sx, sy); break;
+      case 'abnormal': drawEnemyAbnormal(ctx, sx, sy); break;
+      case 'assassin': drawEnemyAssassin(ctx, sx, sy); break;
+      case 'shocker':  drawEnemyShocker(ctx, sx, sy); break;
     }
   }
 
   ctx.filter = 'none';
   ctx.globalAlpha = 1;
 
-  // Warning marks on enemies about to move: 4 corner brackets
-  if (movesNext && !isHit) {
-    ctx.fillStyle = '#ffd60a';
-    const m = WARN_M, s2 = WARN_ARM, th = WARN_TH;
-    ctx.fillRect(sx + m,           sy + m,            s2, th);
-    ctx.fillRect(sx + m,           sy + m,            th, s2);
-    ctx.fillRect(sx + TILE-m-s2,   sy + m,            s2, th);
-    ctx.fillRect(sx + TILE-m-th,   sy + m,            th, s2);
-    ctx.fillRect(sx + m,           sy + TILE-m-th,    s2, th);
-    ctx.fillRect(sx + m,           sy + TILE-m-s2,    th, s2);
-    ctx.fillRect(sx + TILE-m-s2,   sy + TILE-m-th,    s2, th);
-    ctx.fillRect(sx + TILE-m-th,   sy + TILE-m-s2,    th, s2);
+  if (isAssassinAnim) {
+    ctx.restore();
+    return; // skip shield/HP bar during fade anim
+  }
+
+  if (enemy.shield) {
+    const tileW = enemy.type === 'abnormal' ? TILE * 2 : TILE;
+    const tileH = enemy.type === 'abnormal' ? TILE * 2 : TILE;
+    ctx.strokeStyle = '#00cfff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(sx + 1, sy + 1, tileW - 2, tileH - 2);
   }
 
   if (enemy.hp < enemy.maxHp) {
+    const barW = enemy.type === 'abnormal' ? TILE * 2 - 8 : TILE - 8;
+    const barY = enemy.type === 'abnormal' ? sy + TILE * 2 - 6 : sy + TILE - 6;
     ctx.fillStyle = '#333';
-    ctx.fillRect(sx + 4, sy + TILE - 6, TILE - 8, 3);
+    ctx.fillRect(sx + 4, barY, barW, 3);
     ctx.fillStyle = C.hpBar;
-    ctx.fillRect(sx + 4, sy + TILE - 6, (TILE - 8) * (enemy.hp / enemy.maxHp), 3);
+    ctx.fillRect(sx + 4, barY, barW * (enemy.hp / enemy.maxHp), 3);
   }
 }
 
@@ -432,17 +483,198 @@ function drawEnemyBoss(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
   }
 }
 
+function drawEnemyBoss4(ctx: CanvasRenderingContext2D, sx: number, sy: number, burstMovesLeft: number) {
+  const x = sx + 2; const y = sy + 2; const w = TILE - 4; const h = TILE - 4;
+  // Body: deep magenta when active, cool grey when resting
+  const resting = burstMovesLeft === 0;
+  ctx.fillStyle = resting ? '#6b3fa0' : '#c0175d';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = resting ? '#2e1a4a' : '#5a0028';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x, y, w, h);
+  // Diagonal slash (distinct from boss X)
+  ctx.fillStyle = resting ? '#2e1a4a' : '#5a0028';
+  for (let i = 0; i < 5; i++) {
+    ctx.fillRect(x + 4 + i * 5, y + 4 + i * 5, 4, 4);
+  }
+  // Burst pip indicators — 3 squares at the bottom, lit = move remaining
+  const pipW = 6; const pipH = 5; const pipGap = 3;
+  const totalPipW = 3 * pipW + 2 * pipGap;
+  const pipStartX = sx + (TILE - totalPipW) / 2;
+  const pipY = sy + TILE - 10;
+  for (let i = 0; i < 3; i++) {
+    const lit = i < burstMovesLeft;
+    ctx.fillStyle = lit ? '#ffdd00' : '#2e1a4a';
+    ctx.fillRect(pipStartX + i * (pipW + pipGap), pipY, pipW, pipH);
+  }
+}
+
+function drawEnemyTracer(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
+  // Background: fresh trace fill + corner brackets (same as drawTrace at full intensity)
+  ctx.fillStyle = `rgba(180, 20, 70, ${TRACE_ALPHA_MIN + TRACE_ALPHA_RNG})`;
+  ctx.fillRect(sx, sy, TILE, TILE);
+  ctx.strokeStyle = `rgba(220, 40, 80, 0.8)`;
+  ctx.lineWidth = 2;
+  const arm = CHAIN_ARM; const m = 3;
+  ctx.beginPath(); ctx.moveTo(sx + m, sy + m + arm); ctx.lineTo(sx + m, sy + m); ctx.lineTo(sx + m + arm, sy + m); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sx + TILE - m - arm, sy + m); ctx.lineTo(sx + TILE - m, sy + m); ctx.lineTo(sx + TILE - m, sy + m + arm); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sx + m, sy + TILE - m - arm); ctx.lineTo(sx + m, sy + TILE - m); ctx.lineTo(sx + m + arm, sy + TILE - m); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sx + TILE - m - arm, sy + TILE - m); ctx.lineTo(sx + TILE - m, sy + TILE - m); ctx.lineTo(sx + TILE - m, sy + TILE - m - arm); ctx.stroke();
+
+  // Diamond body on top
+  const cx = sx + TILE / 2; const cy = sy + TILE / 2; const r = TILE / 2 - 4;
+  ctx.fillStyle = C.enemyTracer;
+  ctx.beginPath();
+  ctx.moveTo(cx,     cy - r);
+  ctx.lineTo(cx + r, cy);
+  ctx.lineTo(cx,     cy + r);
+  ctx.lineTo(cx - r, cy);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = C.enemyTracerOutline; ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = C.enemyTracerOutline;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawEnemyAbnormal(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
+  // 2×2 tile block — sx/sy is the top-left tile corner
+  const x = sx + 3; const y = sy + 3;
+  const w = TILE * 2 - 6; const h = TILE * 2 - 6;
+  ctx.fillStyle = C.enemyAbnormal;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = C.enemyAbnormalOutline; ctx.lineWidth = 3;
+  ctx.strokeRect(x, y, w, h);
+  // Inner grid dividing 4 quadrants
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(sx + TILE, y); ctx.lineTo(sx + TILE, y + h);  // vertical divider
+  ctx.moveTo(x, sy + TILE); ctx.lineTo(x + w, sy + TILE);  // horizontal divider
+  ctx.stroke();
+  // Corner protrusions
+  ctx.fillStyle = C.enemyAbnormal;
+  ctx.strokeStyle = C.enemyAbnormalOutline; ctx.lineWidth = 2;
+  const pw = 6; const ph = 10;
+  ctx.fillRect(sx + TILE - pw / 2, sy - 4, pw, 4);       // top center
+  ctx.fillRect(sx + TILE - pw / 2, sy + TILE * 2, pw, 4); // bottom center
+  ctx.fillRect(sx - 4, sy + TILE - pw / 2, 4, pw);        // left center
+  ctx.fillRect(sx + TILE * 2, sy + TILE - pw / 2, 4, pw); // right center
+  void ph;
+}
+
+function drawEnemyAssassin(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
+  const cx = sx + TILE / 2; const cy = sy + TILE / 2;
+  // Narrow diamond/rhombus — hints at slipping through gaps
+  const rW = TILE / 2 - 6; const rH = TILE / 2 - 2;
+  ctx.fillStyle = C.enemyAssassin;
+  ctx.beginPath();
+  ctx.moveTo(cx,       cy - rH);
+  ctx.lineTo(cx + rW,  cy);
+  ctx.lineTo(cx,       cy + rH);
+  ctx.lineTo(cx - rW,  cy);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = C.enemyAssassinOutline; ctx.lineWidth = 2;
+  ctx.stroke();
+  // Small dot eye at center
+  ctx.fillStyle = C.enemyAssassinOutline;
+  ctx.fillRect(cx - 2, cy - 2, 4, 4);
+}
+
+function drawEnemyShocker(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
+  const cx = sx + TILE / 2; const cy = sy + TILE / 2;
+  // Rounded square body
+  const r = 6; const hw = TILE / 2 - 5;
+  ctx.fillStyle = C.enemyShocker;
+  ctx.strokeStyle = C.enemyShockerOutline; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - hw + r, cy - hw);
+  ctx.lineTo(cx + hw - r, cy - hw); ctx.arcTo(cx + hw, cy - hw, cx + hw, cy - hw + r, r);
+  ctx.lineTo(cx + hw, cy + hw - r); ctx.arcTo(cx + hw, cy + hw, cx + hw - r, cy + hw, r);
+  ctx.lineTo(cx - hw + r, cy + hw); ctx.arcTo(cx - hw, cy + hw, cx - hw, cy + hw - r, r);
+  ctx.lineTo(cx - hw, cy - hw + r); ctx.arcTo(cx - hw, cy - hw, cx - hw + r, cy - hw, r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // 4 short radiating spark lines (cardinal)
+  ctx.strokeStyle = C.enemyShockerOutline; ctx.lineWidth = 2;
+  const sparkLen = 7;
+  const dirs2: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+  for (const [dx, dy] of dirs2) {
+    ctx.beginPath();
+    ctx.moveTo(cx + dx * (hw - 2), cy + dy * (hw - 2));
+    ctx.lineTo(cx + dx * (hw + sparkLen), cy + dy * (hw + sparkLen));
+    ctx.stroke();
+  }
+  // Small zigzag detail inside
+  ctx.fillStyle = C.enemyShockerOutline;
+  ctx.fillRect(cx - 4, cy - 2, 3, 2);
+  ctx.fillRect(cx - 1, cy, 3, 2);
+  ctx.fillRect(cx + 2, cy - 2, 3, 2);
+}
+
+function drawPlayerDeathEffect(
+  ctx: CanvasRenderingContext2D,
+  sx: number, sy: number,
+  t: number  // 0→1
+) {
+  const cx = sx + TILE / 2;
+  const cy = sy + TILE / 2;
+  const easeIn = t * t;
+  const alpha = Math.max(0, 1 - t * t);
+
+  // Large white flash at the start
+  if (t < 0.35) {
+    const flashT = t / 0.35;
+    ctx.globalAlpha = (1 - flashT) * 0.9;
+    ctx.fillStyle = '#ffffff';
+    const flashSize = TILE * 2.2 * (1 - flashT * 0.5);
+    ctx.fillRect(cx - flashSize / 2, cy - flashSize / 2, flashSize, flashSize);
+  }
+
+  // Red cross fragments flying outward
+  const spread = easeIn * TILE * 2.4;
+  const size = Math.max(2, 8 * (1 - t));
+  ctx.fillStyle = C.playerCross;
+  ctx.globalAlpha = alpha;
+  const dirs: [number, number][] = [
+    [1, 0], [-1, 0], [0, 1], [0, -1],
+    [1, 1], [-1, 1], [1, -1], [-1, -1],
+  ];
+  for (const [dx, dy] of dirs) {
+    const len = Math.hypot(dx, dy);
+    ctx.fillRect(cx + (dx / len) * spread - size / 2, cy + (dy / len) * spread - size / 2, size, size);
+  }
+
+  // White outline fragments at half-spread, slightly delayed
+  if (t > 0.08) {
+    const t2 = (t - 0.08) / 0.92;
+    const spread2 = t2 * t2 * TILE * 1.2;
+    const size2 = Math.max(1.5, 5 * (1 - t));
+    ctx.fillStyle = C.playerOutline;
+    ctx.globalAlpha = alpha * 0.7;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
+      ctx.fillRect(cx + dx * spread2 - size2 / 2, cy + dy * spread2 - size2 / 2, size2, size2);
+    }
+  }
+
+  ctx.globalAlpha = 1;
+}
+
 function drawProjectile(
   ctx: CanvasRenderingContext2D,
   sx: number, sy: number,
-  dx: number, dy: number
+  dx: number, dy: number,
+  fromBoss?: boolean
 ) {
   const cx = sx + TILE / 2;
   const cy = sy + TILE / 2;
   const s = 7; // half-size of triangle
 
-  ctx.fillStyle = C.projectile;
-  ctx.strokeStyle = C.enemyRangedOutline;
+  ctx.fillStyle = fromBoss ? C.enemyBoss : C.projectile;
+  ctx.strokeStyle = fromBoss ? C.enemyBossOutline : C.enemyRangedOutline;
   ctx.lineWidth = 1;
   ctx.beginPath();
 
@@ -473,35 +705,51 @@ function drawDeathEffect(
   ctx: CanvasRenderingContext2D,
   sx: number, sy: number,
   t: number,  // 0→1, where 0=just died, 1=fully faded
-  type: string
+  type: string,
+  sizeFactor = 1
 ) {
   const color = enemyMainColor(type);
-  const alpha = Math.max(0, 1 - t);
-  ctx.globalAlpha = alpha;
+  // Linger opaque, then drop off sharply at the end
+  const alpha = Math.max(0, 1 - t * t);
+  const cx = sx + TILE * sizeFactor / 2;
+  const cy = sy + TILE * sizeFactor / 2;
 
-  // Center of the tile
-  const cx = sx + TILE / 2;
-  const cy = sy + TILE / 2;
+  // Ease-in spread: particles shoot out fast at start, decelerate
+  const easeIn = t * t;
+  const spread = easeIn * TILE * 1.8 * sizeFactor;
+  const particleSize = Math.max(1.5, 7 * (1 - t) * sizeFactor);
 
-  // 8 pixel squares scatter outward
-  const spread = t * TILE * 1.4;
-  const particleSize = Math.max(2, 6 * (1 - t));
-  const directions = [
+  // 8 primary particles
+  const cardinals: [number, number][] = [
     [1, 0], [-1, 0], [0, 1], [0, -1],
     [1, 1], [-1, 1], [1, -1], [-1, -1],
   ];
-
   ctx.fillStyle = color;
-  for (const [dx, dy] of directions) {
-    const px = cx + dx * spread - particleSize / 2;
-    const py = cy + dy * spread - particleSize / 2;
+  ctx.globalAlpha = alpha;
+  for (const [dx, dy] of cardinals) {
+    const len = Math.hypot(dx, dy);
+    const px = cx + (dx / len) * spread - particleSize / 2;
+    const py = cy + (dy / len) * spread - particleSize / 2;
     ctx.fillRect(px, py, particleSize, particleSize);
   }
 
-  // Inner flash (bright center that fades first)
-  if (t < 0.3) {
+  // 4 smaller secondary particles at half-spread, slightly delayed
+  if (t > 0.1) {
+    const t2 = (t - 0.1) / 0.9;
+    const spread2 = t2 * t2 * TILE * 0.9 * sizeFactor;
+    const size2 = Math.max(1, 4 * (1 - t) * sizeFactor);
+    ctx.globalAlpha = alpha * 0.6;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number,number][]) {
+      ctx.fillRect(cx + dx * spread2 - size2 / 2, cy + dy * spread2 - size2 / 2, size2, size2);
+    }
+  }
+
+  // White inner flash that persists into mid-animation
+  if (t < 0.45) {
+    const flashT = t / 0.45;
+    ctx.globalAlpha = alpha * (1 - flashT);
     ctx.fillStyle = '#fff';
-    const flashSize = (TILE - 8) * (1 - t / 0.3);
+    const flashSize = (TILE - 4) * sizeFactor * (1 - flashT * 0.6);
     ctx.fillRect(cx - flashSize / 2, cy - flashSize / 2, flashSize, flashSize);
   }
 
@@ -599,6 +847,24 @@ function drawChainLine(
 
   ctx.setLineDash([]);
   ctx.lineCap = 'butt';
+  ctx.globalAlpha = 1;
+}
+
+function drawShockwave(
+  ctx: CanvasRenderingContext2D,
+  pos: { x: number; y: number },
+  ws: (wx: number, wy: number) => { sx: number; sy: number },
+  t: number  // 0→1 effectT
+) {
+  const alpha = (1 - t) * 0.7;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#ffe066';
+  const margin = 4;
+  const crossDirs = [{ x: 0, y: -1 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 1, y: 0 }];
+  for (const d of crossDirs) {
+    const { sx, sy } = ws(pos.x + d.x, pos.y + d.y);
+    ctx.fillRect(sx + margin, sy + margin, TILE - margin * 2, TILE - margin * 2);
+  }
   ctx.globalAlpha = 1;
 }
 

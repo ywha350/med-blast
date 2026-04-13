@@ -3,7 +3,7 @@ export interface Position {
   y: number;
 }
 
-export type EnemyType = 'normal' | 'tanker' | 'speedy' | 'ranged' | 'boss';
+export type EnemyType = 'normal' | 'tanker' | 'speedy' | 'ranged' | 'boss' | 'tracer' | 'abnormal' | 'assassin' | 'shocker';
 export type ItemType = 'hp_potion' | 'attack_boost' | 'magnet' | 'shield';
 export type GamePhase = 'start' | 'playing' | 'skill_select' | 'game_over';
 export type Direction = 'up' | 'down' | 'left' | 'right';
@@ -25,7 +25,7 @@ export interface Player {
   expMultiplier: number;
   dropRateBonus: number;
   counterAttack: boolean;
-  chainAttack: boolean;
+  chainAttack: number;  // 0 = off, 1 = 1 chain, 2 = 2 chains
   hasRevive: boolean;
   shieldActive: boolean;
   attackBoostCharges: number;
@@ -40,6 +40,12 @@ export interface Enemy {
   exp: number;
   type: EnemyType;
   fireCooldown: number;   // ranged/boss: ticks until next shot (0 = ready)
+  bossLevel?: number;     // boss: which boss this is (1st, 2nd, …) for phase gating
+  burstMovesLeft?: number; // 4th boss: remaining moves in current burst (3→2→1→0=rest)
+  hidden?: boolean;        // assassin: true = invisible & harmless
+  assassinMoves?: number;  // assassin: countdown of visible moves before hiding (2→1→0→hide)
+  size?: number;           // abnormal: 2 = 2×2 footprint (pos = top-left corner)
+  shield?: boolean;        // absorbs the next hit, then breaks
 }
 
 export interface Projectile {
@@ -48,6 +54,7 @@ export interface Projectile {
   dx: number;   // direction: -1 | 0 | 1
   dy: number;
   ticksLeft: number;
+  fromBoss?: boolean;
 }
 
 export interface DropItem {
@@ -62,6 +69,7 @@ export interface Skill {
   description: string;
   category: string;
   apply: (player: Player) => Player;
+  requires?: string;  // skill id that must already be selected
 }
 
 export interface DamageNumber {
@@ -104,4 +112,7 @@ export interface GameState {
   hitFlashTick: number;
   traces: Trace[];
   nextTraceId: number;
+  bossesSpawned: number;
+  tilesWalked: number;
+  shockerPositions: Position[];  // transient: positions where a shocker fired this tick
 }

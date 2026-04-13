@@ -1,16 +1,25 @@
-import { RotateCcw, Home, Trophy, Crosshair, Zap } from 'lucide-react';
+import { RotateCcw, Home, Trophy, Crosshair, Zap, Timer } from 'lucide-react';
 
 interface GameOverProps {
   score: number;
   kills: number;
   level: number;
   bestScore: number;
+  elapsedTime: number;
   onRestart: () => void;
   onTitle: () => void;
 }
 
-export function GameOver({ score, kills, level, bestScore, onRestart, onTitle }: GameOverProps) {
+function formatTime(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
+}
+
+export function GameOver({ score, kills, level, bestScore, elapsedTime, onRestart, onTitle }: GameOverProps) {
   const isNewBest = score >= bestScore;
+  const elapsedSec = elapsedTime / 1000;
+  const scorePerSec = elapsedSec > 0 ? (score / elapsedSec).toFixed(1) : '0.0';
 
   return (
     <div className="overlay gameover-overlay">
@@ -31,6 +40,16 @@ export function GameOver({ score, kills, level, bestScore, onRestart, onTitle }:
             <Zap size={12} strokeWidth={2} />
             <span className="stat-label">Level</span>
             <span className="stat-value">{level}</span>
+          </div>
+          <div className="stat-row">
+            <Timer size={12} strokeWidth={2} />
+            <span className="stat-label">Time</span>
+            <span className="stat-value">{formatTime(elapsedTime)}</span>
+          </div>
+          <div className="stat-row">
+            <Timer size={12} strokeWidth={2} />
+            <span className="stat-label">Score/s</span>
+            <span className="stat-value">{scorePerSec}</span>
           </div>
           <div className="stat-divider" />
           <div className="stat-row stat-score">

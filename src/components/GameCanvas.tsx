@@ -82,6 +82,7 @@ function buildAnimDiff(prev: GameState, curr: GameState): AnimDiff {
     .filter((l): l is ChainLink => l !== null);
 
   const playerShieldBreak = prev.player.shieldActive && !curr.player.shieldActive;
+  const playerRevive = prev.player.hasRevive && !curr.player.hasRevive && curr.player.hp > 0;
   const playerHit = curr.hitFlash && curr.hitFlashTick === curr.tick;
   const playerDied = curr.phase === 'game_over' && playerHit;
 
@@ -131,6 +132,7 @@ function buildAnimDiff(prev: GameState, curr: GameState): AnimDiff {
     shockwaves,
     shieldBreaks,
     playerShieldBreak,
+    playerRevive,
   };
 }
 
@@ -151,6 +153,7 @@ export function GameCanvas({ state, onMove, onSkillSelectReady }: GameCanvasProp
   const pendingSkillSelectRef = useRef(false);
   const lingeringDeathsRef = useRef<{ death: DeathAnim; startTime: number }[]>([]);
   const playerDeathRef = useRef<{ startTime: number } | null>(null);
+  const playerReviveRef = useRef<{ startTime: number } | null>(null);
   const pendingItemsRef = useRef<Map<number, number>>(new Map()); // itemId → visibleAt
 
   // Keep callback refs fresh
@@ -196,6 +199,14 @@ export function GameCanvas({ state, onMove, onSkillSelectReady }: GameCanvasProp
         playerDeathRef.current = null;
       }
 
+      // Player revive burst (independent timer)
+      const playerReviveT = playerReviveRef.current
+        ? Math.min(1, Math.max(0, (now - playerReviveRef.current.startTime) / DEATH_DURATION))
+        : -1;
+      if (playerReviveRef.current && now > playerReviveRef.current.startTime + DEATH_DURATION) {
+        playerReviveRef.current = null;
+      }
+
       // Reveal items whose delay has passed
       const hiddenItemIds = new Set<number>();
       for (const [id, visibleAt] of pendingItemsRef.current) {
@@ -203,7 +214,7 @@ export function GameCanvas({ state, onMove, onSkillSelectReady }: GameCanvasProp
         else pendingItemsRef.current.delete(id);
       }
 
-      renderFrame(canvas, currStateRef.current, diff, t, deathOverlay, effectT, hitFlashT, hiddenItemIds, playerDeathT);
+      renderFrame(canvas, currStateRef.current, diff, t, deathOverlay, effectT, hitFlashT, hiddenItemIds, playerDeathT, playerReviveT);
 
       const playerHit = diffRef.current?.playerHit ?? false;
 
@@ -229,7 +240,7 @@ export function GameCanvas({ state, onMove, onSkillSelectReady }: GameCanvasProp
       }
 
       // Keep RAF alive while moving, effects, hit flash, deaths, or player death are running
-      if (t < 1 || effectT < 1 || (playerHit && hitFlashT < 1) || lingeringDeathsRef.current.length > 0 || playerDeathRef.current) {
+      if (t < 1 || effectT < 1 || (playerHit && hitFlashT < 1) || lingeringDeathsRef.current.length > 0 || playerDeathRef.current || playerReviveRef.current) {
         rafRef.current = requestAnimationFrame(loop);
       }
     };
@@ -264,6 +275,10 @@ export function GameCanvas({ state, onMove, onSkillSelectReady }: GameCanvasProp
       if (newDiff.playerDied) {
         playerDeathRef.current = { startTime: deathStart };
       }
+      // Start revive burst when Second Wind triggered this tick
+      if (newDiff.playerRevive) {
+        playerReviveRef.current = { startTime: deathStart };
+      }
       // Delay newly dropped items until after the death burst starts
       const prevItemIds = new Set(prev.items.map(i => i.id));
       for (const item of curr.items) {
@@ -280,6 +295,7 @@ export function GameCanvas({ state, onMove, onSkillSelectReady }: GameCanvasProp
       // For overlays (game_over, etc.) jump straight to final state
       lingeringDeathsRef.current = [];
       playerDeathRef.current = null;
+      playerReviveRef.current = null;
       pendingItemsRef.current.clear();
       pendingSkillSelectRef.current = false;
       diffRef.current = null;

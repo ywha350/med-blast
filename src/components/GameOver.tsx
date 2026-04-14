@@ -1,4 +1,5 @@
 import { RotateCcw, Home, Trophy, Crosshair, Zap, Timer } from 'lucide-react';
+import { GameMode } from '../game/types';
 
 interface GameOverProps {
   score: number;
@@ -6,6 +7,8 @@ interface GameOverProps {
   level: number;
   bestScore: number;
   elapsedTime: number;
+  gameMode: GameMode;
+  gameOverReason: 'died' | 'timeout';
   onRestart: () => void;
   onTitle: () => void;
 }
@@ -16,8 +19,10 @@ function formatTime(ms: number): string {
   return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function GameOver({ score, kills, level, bestScore, elapsedTime, onRestart, onTitle }: GameOverProps) {
+export function GameOver({ score, kills, level, bestScore, elapsedTime, gameMode, gameOverReason, onRestart, onTitle }: GameOverProps) {
   const isNewBest = score >= bestScore;
+  const isTimeAttack = gameMode === 'time_attack';
+  const isTimeout = gameOverReason === 'timeout';
   const elapsedSec = elapsedTime / 1000;
   const scorePerSec = elapsedSec > 0 ? (score / elapsedSec).toFixed(1) : '0.0';
 
@@ -26,7 +31,7 @@ export function GameOver({ score, kills, level, bestScore, elapsedTime, onRestar
       <div className="gameover-container">
         <div className="gameover-header">
           <div className="gameover-pixel-germ" />
-          <h2 className="gameover-title">INFECTED</h2>
+          <h2 className="gameover-title">{isTimeout ? "TIME'S UP!" : 'INFECTED'}</h2>
           {isNewBest && <span className="new-best-badge">NEW BEST!</span>}
         </div>
 
@@ -36,21 +41,25 @@ export function GameOver({ score, kills, level, bestScore, elapsedTime, onRestar
             <span className="stat-label">Kills</span>
             <span className="stat-value">{kills}</span>
           </div>
-          <div className="stat-row">
-            <Zap size={12} strokeWidth={2} />
-            <span className="stat-label">Level</span>
-            <span className="stat-value">{level}</span>
-          </div>
+          {!isTimeAttack && (
+            <div className="stat-row">
+              <Zap size={12} strokeWidth={2} />
+              <span className="stat-label">Level</span>
+              <span className="stat-value">{level}</span>
+            </div>
+          )}
           <div className="stat-row">
             <Timer size={12} strokeWidth={2} />
             <span className="stat-label">Time</span>
             <span className="stat-value">{formatTime(elapsedTime)}</span>
           </div>
-          <div className="stat-row">
-            <Timer size={12} strokeWidth={2} />
-            <span className="stat-label">Score/s</span>
-            <span className="stat-value">{scorePerSec}</span>
-          </div>
+          {!isTimeAttack && (
+            <div className="stat-row">
+              <Timer size={12} strokeWidth={2} />
+              <span className="stat-label">Score/s</span>
+              <span className="stat-value">{scorePerSec}</span>
+            </div>
+          )}
           <div className="stat-divider" />
           <div className="stat-row stat-score">
             <Trophy size={14} strokeWidth={2} />

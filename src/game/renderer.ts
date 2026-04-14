@@ -107,6 +107,7 @@ export function renderFrame(
   hitFlashT = 0,
   hiddenItemIds: ReadonlySet<number> = new Set(),
   playerDeathT = -1,   // -1 = not dying; 0→1 = death burst progress
+  playerReviveT = -1,  // -1 = not reviving; 0→1 = revive burst progress
 ): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -239,6 +240,11 @@ export function renderFrame(
       const { sx, sy } = ws(p.pos.x, p.pos.y);
       drawProjectile(ctx, sx, sy, p.dx, p.dy, p.fromBoss);
     }
+  }
+
+  // ── Player revive burst ───────────────────────────────────────────────
+  if (playerReviveT >= 0 && playerReviveT < 1) {
+    drawReviveEffect(ctx, playerSX, playerSY, playerReviveT);
   }
 
   // ── Player ────────────────────────────────────────────────────────────
@@ -912,6 +918,47 @@ function drawShockwave(
     const { sx, sy } = ws(pos.x + d.x, pos.y + d.y);
     ctx.fillRect(sx + margin, sy + margin, TILE - margin * 2, TILE - margin * 2);
   }
+  ctx.globalAlpha = 1;
+}
+
+function drawReviveEffect(
+  ctx: CanvasRenderingContext2D,
+  sx: number, sy: number,
+  t: number  // 0→1 over DEATH_DURATION
+) {
+  const cx = sx + TILE / 2;
+  const cy = sy + TILE / 2;
+
+  // Golden flash: fills tile early then fades
+  const flashAlpha = t < 0.3 ? (t / 0.3) * 0.6 : Math.max(0, 1 - (t - 0.3) / 0.7) * 0.6;
+  ctx.globalAlpha = flashAlpha;
+  ctx.fillStyle = '#ffd60a';
+  ctx.fillRect(sx - 6, sy - 6, TILE + 12, TILE + 12);
+
+  // 8 gold particles flying outward
+  const dirs = [
+    [0, -1], [0, 1], [-1, 0], [1, 0],
+    [-0.707, -0.707], [0.707, -0.707], [-0.707, 0.707], [0.707, 0.707],
+  ];
+  const speed = TILE * 1.2 * t;
+  const pW = 5; const pH = 3;
+  const pAlpha = t < 0.1 ? t / 0.1 : Math.max(0, 1 - (t - 0.1) / 0.9) * (1 - t * t);
+  ctx.globalAlpha = pAlpha;
+  ctx.fillStyle = '#ffd60a';
+  for (const [dx, dy] of dirs) {
+    ctx.fillRect(cx + dx * speed - pW / 2, cy + dy * speed - pH / 2, pW, pH);
+  }
+
+  // Two expanding concentric rings at different speeds
+  for (const [scale, lw, alpha] of [[0.9, 2.5, 0.9], [0.55, 1.5, 0.6]] as [number, number, number][]) {
+    const ringSize = TILE * 0.25 + TILE * scale * t;
+    const rAlpha = Math.max(0, (1 - t) * alpha);
+    ctx.globalAlpha = rAlpha;
+    ctx.strokeStyle = '#ffd60a';
+    ctx.lineWidth = lw;
+    ctx.strokeRect(cx - ringSize / 2, cy - ringSize / 2, ringSize, ringSize);
+  }
+
   ctx.globalAlpha = 1;
 }
 

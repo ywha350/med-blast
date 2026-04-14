@@ -6,6 +6,7 @@ export interface Position {
 export type EnemyType = 'normal' | 'tanker' | 'speedy' | 'ranged' | 'boss' | 'tracer' | 'abnormal' | 'assassin' | 'shocker';
 export type ItemType = 'hp_potion' | 'attack_boost' | 'magnet' | 'shield';
 export type GamePhase = 'start' | 'playing' | 'skill_select' | 'game_over';
+export type GameMode = 'classic' | 'time_attack';
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
 export interface Player {
@@ -115,4 +116,8 @@ export interface GameState {
   bossesSpawned: number;
   tilesWalked: number;
   shockerPositions: Position[];  // transient: positions where a shocker fired this tick
+  gameMode: GameMode;
+  taLastScore: number;
+  taBestScore: number;
+  gameOverReason: 'died' | 'timeout';
 }

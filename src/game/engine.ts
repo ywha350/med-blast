@@ -1,11 +1,12 @@
 import {
-  GameState, Player, Enemy, Direction, Position,
+  GameState, GameMode, Player, Enemy, Direction, Position,
   DamageNumber, ItemType, EnemyType, Projectile, Trace
 } from './types';
 import { pickRandomSkills, getExpThresholds } from './skills';
 import {
   ENEMY_STATS, SPAWN, BOSS_HP_SCALE, BOSS_BURST_MOVES, ENEMY_SHIELD_CHANCE,
-  pickEnemyType, getSpawnInterval,
+  pickEnemyType, pickEnemyTypeFromDef, getSpawnInterval,
+  TIME_ATTACK_WAVE, TIME_ATTACK_DURATION,
 } from './waves';
 
 const VIEWPORT_HALF = 7;
@@ -38,6 +39,10 @@ export function createInitialState(): GameState {
     bossesSpawned: 0,
     tilesWalked: 0,
     shockerPositions: [],
+    gameMode: 'classic',
+    taLastScore: getTaLastScore(),
+    taBestScore: getTaBestScore(),
+    gameOverReason: 'died',
   };
 }
 
@@ -72,13 +77,22 @@ function getLastScore(): number {
 function getBestScore(): number {
   try { return parseInt(localStorage.getItem('gridRogue_bestScore') || '0'); } catch { return 0; }
 }
+function getTaLastScore(): number {
+  try { return parseInt(localStorage.getItem('gridRogue_ta_lastScore') || '0'); } catch { return 0; }
+}
+function getTaBestScore(): number {
+  try { return parseInt(localStorage.getItem('gridRogue_ta_bestScore') || '0'); } catch { return 0; }
+}
 
-export function startGame(state: GameState): GameState {
+export function startGame(state: GameState, mode: GameMode = 'classic'): GameState {
   return {
     ...createInitialState(),
     phase: 'playing',
+    gameMode: mode,
     lastScore: state.lastScore,
     bestScore: state.bestScore,
+    taLastScore: state.taLastScore,
+    taBestScore: state.taBestScore,
     startTime: Date.now(),
   };
 }
@@ -239,7 +253,9 @@ function spawnEnemy(state: GameState, forceType?: EnemyType): GameState {
   const { pos: { x: px, y: py } } = state.player;
   const spawnPos = edgeSpawnPos(px, py);
   const wave = Math.floor(state.tick / SPAWN.waveLength);
-  const type = forceType ?? pickEnemyType(wave);
+  const type = forceType ?? (
+    state.gameMode === 'time_attack' ? pickEnemyTypeFromDef(TIME_ATTACK_WAVE) : pickEnemyType(wave)
+  );
   if (type === 'abnormal') {
     if (!abnormalFootprintFree(spawnPos, state.enemies)) return state;
   } else {
@@ -256,7 +272,8 @@ function spawnEnemyInDirection(state: GameState, dir: Direction): GameState {
   const spawnPos = dirSpawnPos(px, py, dir);
   if (isOccupiedByEnemy(spawnPos, state.enemies)) return state;
   const wave = Math.floor(state.tick / SPAWN.waveLength);
-  const enemy = buildEnemy(state.nextEnemyId, spawnPos, pickEnemyType(wave), wave);
+  const type = state.gameMode === 'time_attack' ? pickEnemyTypeFromDef(TIME_ATTACK_WAVE) : pickEnemyType(wave);
+  const enemy = buildEnemy(state.nextEnemyId, spawnPos, type, wave);
   return { ...state, enemies: [...state.enemies, enemy], nextEnemyId: state.nextEnemyId + 1 };
 }
 
@@ -319,6 +336,11 @@ export function processTick(state: GameState, dir: Direction): GameState {
 
   let s = { ...state, tick: state.tick + 1, elapsedTime: Date.now() - state.startTime };
 
+  // Time Attack: end when 60 s expire
+  if (s.gameMode === 'time_attack' && s.elapsedTime >= TIME_ATTACK_DURATION) {
+    return endGame(s, 'timeout');
+  }
+
   // Move player — blocked if an enemy occupies the target tile
   const targetPos = moveInDir(s.player.pos, dir);
   const blocked = isOccupiedByEnemy(targetPos, s.enemies);
@@ -362,7 +384,7 @@ export function processTick(state: GameState, dir: Direction): GameState {
     Math.abs(e.pos.x - s.player.pos.x) <= VIEWPORT_HALF &&
     Math.abs(e.pos.y - s.player.pos.y) <= VIEWPORT_HALF
   ).length;
-  const interval = getSpawnInterval(s.tick);
+  const interval = s.gameMode === 'time_attack' ? 1 : getSpawnInterval(s.tick);
   if (visibleCount < MAX_ENEMIES && s.tick % interval === 0) s = spawnEnemy(s);
   if (visibleCount < MAX_ENEMIES && s.tick % (interval * 2) === 0) s = spawnEnemy(s);
   // Boss spawn
@@ -512,8 +534,10 @@ export function processTick(state: GameState, dir: Direction): GameState {
   s = performAttack(s);
 
   // ── Level up check ──────────────────────────────────────────────────────
-  s = checkLevelUp(s);
-  if (s.phase === 'skill_select') return s;
+  if (s.gameMode !== 'time_attack') {
+    s = checkLevelUp(s);
+    if (s.phase === 'skill_select') return s;
+  }
 
   // ── Collision / damage ──────────────────────────────────────────────────
   s = checkCollision(s, playerHitByProjectile);
@@ -729,7 +753,7 @@ function applyItem(player: Player, type: ItemType): Player {
   switch (type) {
     case 'hp_potion':    return { ...player, hp: Math.min(player.hp + 1, player.maxHp) };
     case 'attack_boost': return { ...player, attackBoostCharges: player.attackBoostCharges + 5 };
-    case 'magnet':       return { ...player, exp: player.exp + 5 };
+    case 'magnet':       return { ...player, exp: player.exp + 10 };
     case 'shield':       return { ...player, shieldActive: true };
   }
 }
@@ -746,19 +770,27 @@ export function applySkill(state: GameState, skillId: string): GameState {
   };
 }
 
-function endGame(state: GameState): GameState {
+function endGame(state: GameState, reason: 'died' | 'timeout' = 'died'): GameState {
   const elapsed = Date.now() - state.startTime;
   const score = calcScore(state);
+  if (state.gameMode === 'time_attack') {
+    const taBest = Math.max(score, state.taBestScore);
+    try {
+      localStorage.setItem('gridRogue_ta_lastScore', score.toString());
+      localStorage.setItem('gridRogue_ta_bestScore', taBest.toString());
+    } catch { /* ignore */ }
+    return { ...state, phase: 'game_over', elapsedTime: elapsed, taLastScore: score, taBestScore: taBest, gameOverReason: reason };
+  }
   const bestScore = Math.max(score, state.bestScore);
   try {
     localStorage.setItem('gridRogue_lastScore', score.toString());
     localStorage.setItem('gridRogue_bestScore', bestScore.toString());
   } catch { /* ignore */ }
-  return { ...state, phase: 'game_over', elapsedTime: elapsed, lastScore: score, bestScore };
+  return { ...state, phase: 'game_over', elapsedTime: elapsed, lastScore: score, bestScore, gameOverReason: reason };
 }
 
 export function restartGame(state: GameState): GameState {
-  return startGame(state);
+  return startGame(state, state.gameMode);
 }
 
 /** Returns true if this enemy type will move on the NEXT player step.

@@ -10,6 +10,10 @@
   padding: 0;
 }
 
+button:focus, button:focus-visible {
+  outline: none;
+}
+
 :root {
   --bg: #0d1b2a;
   --bg-panel: #112233;
@@ -172,12 +176,68 @@ html, body {
   letter-spacing: 2px;
 }
 
-.play-button:hover {
-  background: #08f5b8;
-}
 
 .play-button:active {
   transform: translate(2px, 2px);
+}
+
+/* ── Mode select buttons ─────────────────────────────────────────────────── */
+.mode-select {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 70%;
+}
+
+.mode-button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 2px solid var(--border);
+  padding: 14px 12px;
+  font-family: var(--font);
+  font-size: 8px;
+  cursor: pointer;
+  transition: border-color 0.1s, background 0.1s;
+  letter-spacing: 1px;
+}
+
+.mode-button:active {
+  transform: translate(1px, 1px);
+}
+
+.mode-label {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--accent-green);
+}
+
+.mode-button-ta .mode-label {
+  color: #ef334d;
+}
+
+
+.mode-best {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 8px;
+  color: var(--text-dim);
+}
+
+/* ── HUD countdown warning ────────────────────────────────────────────────── */
+.hud-countdown-warning {
+  color: #ef334d;
+  animation: countdown-pulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes countdown-pulse {
+  from { opacity: 1; }
+  to   { opacity: 0.5; }
 }
 
 .controls-hint {
@@ -294,6 +354,7 @@ html, body {
 
 .badge-shield { color: var(--accent-blue); border-color: var(--accent-blue); }
 .badge-boost { color: var(--accent-yellow); border-color: var(--accent-yellow); }
+.badge-revive { color: #ffd60a; border-color: #ffd60a; }
 
 /* ========== CANVAS ========== */
 
@@ -397,7 +458,6 @@ html, body {
 
 .skill-card:hover {
   border-color: var(--accent-green);
-  background: var(--bg-panel);
 }
 
 .skill-card:active {
@@ -564,9 +624,6 @@ html, body {
   border-color: #0a1a0a;
 }
 
-.action-button.primary:hover {
-  background: #08f5b8;
-}
 
 .action-button.secondary {
   background: transparent;
@@ -574,11 +631,6 @@ html, body {
   border-color: var(--border);
 }
 
-.action-button.secondary:hover {
-  background: var(--bg-panel);
-  border-color: var(--border-bright);
-  color: var(--text);
-}
 
 /* ========== RESPONSIVE ========== */
 

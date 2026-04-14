@@ -96,6 +96,13 @@ export const DEFAULT_WAVE: WaveDef = {
   weights: { normal: 10, speedy: 10, tanker: 15, ranged: 12, tracer: 10, abnormal: 22 },
 };
 
+export const TIME_ATTACK_WAVE: WaveDef = {
+  weights: { normal: 32, speedy: 30, tanker: 18, ranged: 20 },
+};
+
+
+export const TIME_ATTACK_DURATION = 60_000; // ms
+
 // ── Helpers (used by engine.ts — no need to edit these) ─────────────────────
 
 /** Returns the WaveDef for the given wave number. */
@@ -105,7 +112,11 @@ export function getWaveDef(wave: number): WaveDef {
 
 /** Picks a random enemy type according to the weighted mix for this wave. */
 export function pickEnemyType(wave: number): EnemyType {
-  const def = getWaveDef(wave);
+  return pickEnemyTypeFromDef(getWaveDef(wave));
+}
+
+/** Picks a random enemy type from a given WaveDef directly. */
+export function pickEnemyTypeFromDef(def: WaveDef): EnemyType {
   const entries = Object.entries(def.weights) as [EnemyType, number][];
   const total = entries.reduce((sum, [, w]) => sum + w, 0);
   let roll = Math.random() * total;

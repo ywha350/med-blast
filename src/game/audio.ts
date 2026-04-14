@@ -13,6 +13,7 @@ export type SoundName =
   | 'boss_spawn'
   | 'shield_activate'
   | 'shield_break'
+  | 'revive'
   | 'regen'
   | 'move';
 
@@ -335,6 +336,40 @@ function playShieldBreak() {
   osc.stop(t + 0.22);
 }
 
+function playRevive() {
+  // Second Wind: ascending 4-note chime — triumphant rising fifths
+  const c = getCtx(); if (!c) return;
+  const t = time();
+
+  const freqs = [523, 784, 1047, 1568]; // C5, G5, C6, G6
+  freqs.forEach((freq, i) => {
+    const delay = i * 0.1;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0, t + delay);
+    g.gain.linearRampToValueAtTime(0.18, t + delay + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.18);
+    g.connect(masterGain!);
+
+    const osc = c.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, t + delay);
+    osc.connect(g);
+    osc.start(t + delay);
+    osc.stop(t + delay + 0.19);
+  });
+
+  // Shimmer noise underneath
+  const ng = makeGain(0.07);
+  ng.gain.setValueAtTime(0.07, t);
+  ng.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+  const noise = makeNoise(0.46);
+  const hp = makeHighpass(3000);
+  noise.connect(hp);
+  hp.connect(ng);
+  noise.start(t);
+  noise.stop(t + 0.46);
+}
+
 function playMove() {
   // Soft footstep on hospital linoleum: muffled noise thud + faint click
   const c = getCtx(); if (!c) return;
@@ -396,6 +431,7 @@ const soundMap: Record<SoundName, () => void> = {
   boss_spawn: playBossSpawn,
   shield_activate: playShieldActivate,
   shield_break: playShieldBreak,
+  revive: playRevive,
   regen: playRegen,
   move: playMove,
 };

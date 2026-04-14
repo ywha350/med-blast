@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useReducer, useState } from 'react';
 import { useGameAudio } from './hooks/useGameAudio';
 import { AudioManager } from './game/audio';
-import { GameState, Direction } from './game/types';
+import { GameState, GameMode, Direction } from './game/types';
 import { createInitialState, startGame, processTick, applySkill, restartGame, calcScore } from './game/engine';
+import { TIME_ATTACK_DURATION } from './game/waves';
 import { StartScreen } from './components/StartScreen';
 import { GameCanvas } from './components/GameCanvas';
 import { HUD } from './components/HUD';
@@ -11,7 +12,7 @@ import { GameOver } from './components/GameOver';
 import { TICK_DURATION, AFTER_MOVE_DELAY, EFFECT_DURATION, HIT_FLASH_DURATION, DEATH_DURATION } from './game/animTypes';
 
 type Action =
-  | { type: 'START' }
+  | { type: 'START'; mode: GameMode }
   | { type: 'MOVE'; dir: Direction }
   | { type: 'SELECT_SKILL'; skillId: string }
   | { type: 'RESTART' }
@@ -20,7 +21,7 @@ type Action =
 function reducer(state: GameState, action: Action): GameState {
   switch (action.type) {
     case 'START':
-      return startGame(state);
+      return startGame(state, action.mode);
     case 'MOVE':
       if (state.phase !== 'playing') return state;
       return processTick(state, action.dir);
@@ -76,7 +77,9 @@ export default function App() {
         <StartScreen
           lastScore={state.lastScore}
           bestScore={state.bestScore}
-          onPlay={() => { AudioManager.init(); AudioManager.play('game_start'); dispatch({ type: 'START' }); }}
+          taLastScore={state.taLastScore}
+          taBestScore={state.taBestScore}
+          onPlayMode={(mode) => { AudioManager.init(); AudioManager.play('game_start'); dispatch({ type: 'START', mode }); }}
         />
       </div>
     );
@@ -93,6 +96,8 @@ export default function App() {
           level={state.player.level}
           score={score}
           elapsedTime={displayTime}
+          gameMode={state.gameMode}
+          timeLimit={TIME_ATTACK_DURATION}
         />
         <div className="canvas-container">
           <GameCanvas state={state} onMove={handleMove} onSkillSelectReady={() => setShowSkillSelect(true)} />
@@ -108,8 +113,10 @@ export default function App() {
               score={score}
               kills={state.kills}
               level={state.player.level}
-              bestScore={state.bestScore}
+              bestScore={state.gameMode === 'time_attack' ? state.taBestScore : state.bestScore}
               elapsedTime={state.elapsedTime}
+              gameMode={state.gameMode}
+              gameOverReason={state.gameOverReason}
               onRestart={() => dispatch({ type: 'RESTART' })}
               onTitle={() => dispatch({ type: 'TITLE' })}
             />

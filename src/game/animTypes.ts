@@ -57,6 +57,7 @@ export interface AnimDiff {
   shockwaves: Position[];      // shocker fire positions this tick
   shieldBreaks: Position[];    // enemies whose shield was broken this tick
   playerShieldBreak: boolean;  // player shield was broken this tick
+  playerRevive: boolean;        // player triggered Second Wind this tick
 }
 
 export const TICK_DURATION = 160;

@@ -1,5 +1,5 @@
 import { Heart, Zap, Crosshair, Trophy, Timer } from 'lucide-react';
-import { Player } from '../game/types';
+import { Player, GameMode } from '../game/types';
 
 interface HUDProps {
   player: Player;
@@ -7,6 +7,8 @@ interface HUDProps {
   level: number;
   score: number;
   elapsedTime: number;
+  gameMode: GameMode;
+  timeLimit: number;
 }
 
 function formatTime(ms: number): string {
@@ -15,7 +17,10 @@ function formatTime(ms: number): string {
   return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function HUD({ player, kills, level, score, elapsedTime }: HUDProps) {
+export function HUD({ player, kills, level, score, elapsedTime, gameMode, timeLimit }: HUDProps) {
+  const isTimeAttack = gameMode === 'time_attack';
+  const countdown = Math.max(0, timeLimit - elapsedTime);
+  const countdownWarning = isTimeAttack && countdown < 10_000;
   const prevThreshold = player.expThresholds[player.level - 2] ?? 0;
   const nextThreshold = player.expThresholds[player.level - 1] ?? 999;
   const expPct = Math.min(1, (player.exp - prevThreshold) / (nextThreshold - prevThreshold));
@@ -30,19 +35,21 @@ export function HUD({ player, kills, level, score, elapsedTime }: HUDProps) {
             </span>
           ))}
         </div>
-        <div className="hud-exp-row">
-          <Zap size={10} strokeWidth={2} />
-          <div className="exp-bar-track">
-            <div className="exp-bar-fill" style={{ width: `${expPct * 100}%` }} />
+        {!isTimeAttack && (
+          <div className="hud-exp-row">
+            <Zap size={10} strokeWidth={2} />
+            <div className="exp-bar-track">
+              <div className="exp-bar-fill" style={{ width: `${expPct * 100}%` }} />
+            </div>
+            <span className="exp-label">Lv.{level}</span>
           </div>
-          <span className="exp-label">Lv.{level}</span>
-        </div>
+        )}
       </div>
 
       <div className="hud-center">
-        <div className="hud-stat">
+        <div className={`hud-stat${countdownWarning ? ' hud-countdown-warning' : ''}`}>
           <Timer size={12} strokeWidth={2} />
-          <span>{formatTime(elapsedTime)}</span>
+          <span>{isTimeAttack ? formatTime(countdown) : formatTime(elapsedTime)}</span>
         </div>
         <div className="hud-stat">
           <Crosshair size={12} strokeWidth={2} />
@@ -60,6 +67,9 @@ export function HUD({ player, kills, level, score, elapsedTime }: HUDProps) {
         )}
         {player.attackBoostCharges > 0 && (
           <span className="status-badge badge-boost">ATK x2 ({player.attackBoostCharges})</span>
+        )}
+        {player.hasRevive && (
+          <span className="status-badge badge-revive">REVIVE</span>
         )}
       </div>
     </div>

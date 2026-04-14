@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="128" height="128">
   <!-- L shape -->
-  <path d="M0 0H64V32H32V64H0Z" fill="#ef334d"/>
+  <path d="M0 0H64V26H26V64H0Z" fill="#ef334d"/>
 
   <!-- inner square -->
-  <rect x="32" y="32" width="32" height="32" fill="#f3f4f6"/>
+  <rect x="26" y="26" width="38" height="38" fill="#f3f4f6"/>
 </svg>

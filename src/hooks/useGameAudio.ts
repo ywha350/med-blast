@@ -82,6 +82,11 @@ export function useGameAudio(state: GameState): void {
       AudioManager.play('shield_break');
     }
 
+    // Second Wind triggered
+    if (prev.player.hasRevive && !state.player.hasRevive && state.player.hp > 0) {
+      AudioManager.play('revive');
+    }
+
     // Regen: player HP increased without picking up an hp_potion
     const pickedHpPotion =
       state.items.length < prev.items.length &&

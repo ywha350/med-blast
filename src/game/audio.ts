@@ -1,4 +1,4 @@
-// Procedural audio for Med Blast (Doctor vs. Germs)
+// Procedural audio for Medblast (Doctor vs. Germs)
 // All sounds synthesized via Web Audio API — no external files needed.
 
 export type SoundName =

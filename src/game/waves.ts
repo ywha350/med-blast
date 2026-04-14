@@ -97,7 +97,7 @@ export const DEFAULT_WAVE: WaveDef = {
 };
 
 export const TIME_ATTACK_WAVE: WaveDef = {
-  weights: { normal: 32, speedy: 30, tanker: 18, ranged: 20 },
+  weights: { normal: 36, speedy: 30, tanker: 18, ranged: 16 },
 };
 
 

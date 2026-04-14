@@ -17,7 +17,7 @@ export function StartScreen({ bestScore, taBestScore, onPlayMode }: StartScreenP
           <div className="title-pixel-art">
             <div className="pixel-doctor" />
           </div>
-          <h1 className="game-title">MED<br />BLAST</h1>
+          <h1 className="game-title">MEDBLAST</h1>
           <p className="game-subtitle">Doctor vs. Germs</p>
         </div>
 

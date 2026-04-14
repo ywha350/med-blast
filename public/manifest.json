@@ -1,6 +1,6 @@
 {
-  "name": "Med Blast",
-  "short_name": "Med Blast",
+  "name": "Medblast",
+  "short_name": "Medblast",
   "description": "Doctor vs. Germs",
   "start_url": "/med-blast/",
   "display": "standalone",

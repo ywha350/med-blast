@@ -36,7 +36,7 @@ export const ALL_SKILLS: Skill[] = [
     category: 'Utility',
     apply: (p) => ({ ...p, expMultiplier: Math.round((p.expMultiplier + 0.2) * 10) / 10 }),
   },
-  ...times(2, 'scavenger',     'Scavenger',  'Item drop rate +10%',                       'Utility',
+  ...times(1, 'scavenger',     'Scavenger',  'Item drop rate +10%',                       'Utility',
     (p) => ({ ...p, dropRateBonus: Math.round((p.dropRateBonus + 0.10) * 100) / 100 })),
   {
     id: 'chain_attack',

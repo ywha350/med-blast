@@ -31,7 +31,7 @@ export const ENEMY_STATS: Record<EnemyType, { hp: number; exp: number; interval:
   speedy:   { hp: 1, exp: 2,  interval: 1 },
   tanker:   { hp: 3, exp: 3,  interval: 2 },
   ranged:   { hp: 1, exp: 2,  interval: 2 },
-  tracer:   { hp: 2, exp: 3,  interval: 1 },
+  tracer:   { hp: 1, exp: 3,  interval: 1 },
   boss:     { hp: 4, exp: 10, interval: 2 },
   abnormal: { hp: 7, exp: 5,  interval: 2 },
   assassin: { hp: 5, exp: 4,  interval: 1 },
@@ -45,14 +45,14 @@ export const BOSS_HP_SCALE = 4;
 export const BOSS_BURST_MOVES = 3;
 
 // Chance for any enemy to spawn with a shield that absorbs one hit.
-export const ENEMY_SHIELD_CHANCE = 0.10;
+export const ENEMY_SHIELD_CHANCE = 0.08;
 
 // ── Spawn timing ─────────────────────────────────────────────────────────────
 
 export const SPAWN = {
   baseInterval:      4,   // ticks between normal spawns at tick 0
   minInterval:       1,   // spawn interval floor (never faster than this)
-  intervalDecayRate: 30,  // interval drops by 1 every N ticks
+  intervalDecayRate: 80,  // interval drops by 1 every N ticks
   waveLength:        80,  // ticks per wave
   bossEvery:         160, // a boss spawns every N ticks
   bossFire:          2,   // ticks between boss projectile shots

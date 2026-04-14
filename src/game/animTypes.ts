@@ -54,7 +54,8 @@ export interface AnimDiff {
   playerDied: boolean;
   projectiles: ProjectileAnimData[];
   enemyLunges: EnemyLungeAnim[];
-  shockwaves: Position[];   // shocker fire positions this tick
+  shockwaves: Position[];      // shocker fire positions this tick
+  shieldBreaks: Position[];    // enemies whose shield was broken this tick
 }
 
 export const TICK_DURATION = 160;

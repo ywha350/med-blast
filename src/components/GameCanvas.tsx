@@ -43,15 +43,30 @@ function buildAnimDiff(prev: GameState, curr: GameState): AnimDiff {
       .map(d => [d.victimId!, { x: d.worldX, y: d.worldY }])
   );
 
-  // Deaths: present in prev, absent in curr — animate from pre-tick to post-movement
+  // Deaths: present in prev, absent in curr — animate from pre-tick to post-movement.
+  // For abnormal (2×2) enemies, killPosMap stores the closest-to-player tile, not the
+  // top-left corner, which would produce a spurious diagonal slide.  Use e.pos directly.
   const deaths = prev.enemies
     .filter(e => !currMap.has(e.id))
-    .map(e => ({ id: e.id, from: e.pos, pos: killPosMap.get(e.id) ?? e.pos, type: e.type, size: e.type === 'abnormal' ? 2 : undefined }));
+    .map(e => {
+      const pos = e.type === 'abnormal' ? e.pos : (killPosMap.get(e.id) ?? e.pos);
+      return { id: e.id, from: e.pos, pos, type: e.type, size: e.type === 'abnormal' ? 2 : undefined };
+    });
 
   // Attack positions: direct hits only (exclude chain hits — those get their own animation)
   const attackPositions = curr.damageNumbers
     .filter(d => d.tick === curr.tick && !d.isPlayer && !d.isChain)
     .map(d => ({ x: d.worldX, y: d.worldY }));
+
+  // Shield breaks: had shield in prev, lost it in curr, still alive, no damage number
+  const hitVictimIds = new Set(
+    curr.damageNumbers.filter(d => d.tick === curr.tick && !d.isPlayer).map(d => d.victimId)
+  );
+  const shieldBreaks = prev.enemies
+    .filter(e => e.shield && currMap.has(e.id) && !currMap.get(e.id)!.shield && !hitVictimIds.has(e.id))
+    .map(e => currMap.get(e.id)!.pos);
+  // Also draw laser toward shielded enemies (same detection)
+  attackPositions.push(...shieldBreaks);
 
   // Chain links: infection spreads from the nearest primary-target hit
   const primaryHits = curr.damageNumbers.filter(d => d.tick === curr.tick && !d.isPlayer && !d.isChain);
@@ -113,6 +128,7 @@ function buildAnimDiff(prev: GameState, curr: GameState): AnimDiff {
     projectiles,
     enemyLunges,
     shockwaves,
+    shieldBreaks,
   };
 }
 

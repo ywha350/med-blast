@@ -5,6 +5,17 @@ import { enemyMovesNextTick } from './engine';
 export const TILE = 40;
 export const VIEWPORT = 13;
 
+// Detect ctx.filter support once (missing in iOS Safari < 18)
+const supportsCanvasFilter = (() => {
+  try {
+    const c = document.createElement('canvas');
+    const x = c.getContext('2d');
+    if (!x) return false;
+    x.filter = 'grayscale(1)';
+    return x.filter !== 'none' && x.filter !== '';
+  } catch { return false; }
+})();
+
 // ── Renderer constants ───────────────────────────────────────────────────────
 const RESTING_ALPHA   = 0.55;   // alpha for enemies that won't move this tick
 const LUNGE_FACTOR    = 0.28;   // how far enemies lunge toward player (in tiles)
@@ -204,6 +215,14 @@ export function renderFrame(
     }
   }
 
+  // ── Shield break bursts (driven by effectT) ───────────────────────────
+  if (diff && diff.shieldBreaks.length > 0 && effectT > 0 && effectT < 1) {
+    for (const sb of diff.shieldBreaks) {
+      const { sx, sy } = ws(sb.x, sb.y);
+      drawShieldBreak(ctx, sx, sy, effectT);
+    }
+  }
+
   // ── Projectiles (interpolated) ─────────────────────────────────────────
   if (diff) {
     for (const p of diff.projectiles) {
@@ -265,21 +284,35 @@ function drawAttackRange(
   playerSX: number, playerSY: number,
   range: number
 ) {
-  // Camera == player, so each diamond tile is simply playerSX + dx*TILE
+  // Treat center (player tile) as absent so adjacent tiles draw their inner edge toward it
+  const active = (dx: number, dy: number) =>
+    Math.abs(dx) + Math.abs(dy) <= range && !(dx === 0 && dy === 0);
+
   ctx.fillStyle = C.attackRangeFill;
   ctx.strokeStyle = C.attackRangeStroke;
   ctx.lineWidth = 1;
+  ctx.beginPath();
 
   for (let dy = -range; dy <= range; dy++) {
     for (let dx = -range; dx <= range; dx++) {
-      if (Math.abs(dx) + Math.abs(dy) > range) continue;
-      if (dx === 0 && dy === 0) continue;
+      if (!active(dx, dy)) continue;
       const sx = playerSX + dx * TILE;
       const sy = playerSY + dy * TILE;
+
+      // Fill
       ctx.fillRect(sx + 1, sy + 1, TILE - 2, TILE - 2);
-      ctx.strokeRect(sx + 1, sy + 1, TILE - 2, TILE - 2);
+
+      // Each tile owns its BOTTOM and RIGHT edges (always drawn once).
+      // TOP and LEFT are drawn only when the neighbour in that direction is absent,
+      // preventing any shared edge from being stroked twice.
+      ctx.moveTo(sx,        sy + TILE); ctx.lineTo(sx + TILE, sy + TILE); // bottom
+      ctx.moveTo(sx + TILE, sy);        ctx.lineTo(sx + TILE, sy + TILE); // right
+      if (!active(dx, dy - 1)) { ctx.moveTo(sx, sy); ctx.lineTo(sx + TILE, sy); } // top
+      if (!active(dx - 1, dy)) { ctx.moveTo(sx, sy); ctx.lineTo(sx, sy + TILE); } // left
     }
   }
+
+  ctx.stroke();
 }
 
 function drawPlayer(
@@ -352,7 +385,7 @@ function drawEnemy(
 
   // Dim + desaturate enemies that are resting this step
   ctx.globalAlpha = (movesNext ? 1 : RESTING_ALPHA) * assassinAlpha;
-  ctx.filter = movesNext ? 'none' : 'grayscale(1)';
+  if (supportsCanvasFilter) ctx.filter = movesNext ? 'none' : 'grayscale(1)';
 
   if (isHit) {
     ctx.fillStyle = C.hitFlashEnemy;
@@ -374,7 +407,16 @@ function drawEnemy(
     }
   }
 
-  ctx.filter = 'none';
+  // Fallback grayscale for browsers without ctx.filter support (e.g. iOS Safari < 18)
+  if (!supportsCanvasFilter && !movesNext && !isHit) {
+    const tileW = enemy.type === 'abnormal' ? TILE * 2 : TILE;
+    const tileH = enemy.type === 'abnormal' ? TILE * 2 : TILE;
+    ctx.globalAlpha = 0.55 * assassinAlpha;
+    ctx.fillStyle = '#c8c8c8';
+    ctx.fillRect(sx, sy, tileW, tileH);
+  }
+
+  if (supportsCanvasFilter) ctx.filter = 'none';
   ctx.globalAlpha = 1;
 
   if (isAssassinAnim) {
@@ -865,6 +907,49 @@ function drawShockwave(
     const { sx, sy } = ws(pos.x + d.x, pos.y + d.y);
     ctx.fillRect(sx + margin, sy + margin, TILE - margin * 2, TILE - margin * 2);
   }
+  ctx.globalAlpha = 1;
+}
+
+function drawShieldBreak(
+  ctx: CanvasRenderingContext2D,
+  sx: number, sy: number,
+  t: number  // 0→1: effectT
+) {
+  const cx = sx + TILE / 2;
+  const cy = sy + TILE / 2;
+
+  // Brief tile flash: peaks early then fades
+  const flashAlpha = t < 0.2 ? (t / 0.2) * 0.45 : Math.max(0, (1 - t) / 0.8) * 0.45;
+  ctx.globalAlpha = flashAlpha;
+  ctx.fillStyle = '#00cfff';
+  ctx.fillRect(sx, sy, TILE, TILE);
+
+  // 8 shards shooting outward: small rectangles that fly out from center
+  const shardDirs = [
+    [0, -1], [0, 1], [-1, 0], [1, 0],
+    [-0.707, -0.707], [0.707, -0.707], [-0.707, 0.707], [0.707, 0.707],
+  ];
+  const speed = TILE * 0.9 * t;       // how far the shard travels
+  const shardW = 5;
+  const shardH = 3;
+  const shardAlpha = t < 0.15 ? t / 0.15 : Math.max(0, 1 - (t - 0.15) / 0.85);
+
+  ctx.globalAlpha = shardAlpha * 0.9;
+  ctx.fillStyle = '#00cfff';
+  for (const [dx, dy] of shardDirs) {
+    const px = cx + dx * speed - shardW / 2;
+    const py = cy + dy * speed - shardH / 2;
+    ctx.fillRect(px, py, shardW, shardH);
+  }
+
+  // Inner ring burst: expanding cyan stroke square
+  const ringSize = TILE * 0.3 + TILE * 0.7 * t;
+  const ringAlpha = Math.max(0, 1 - t) * 0.8;
+  ctx.globalAlpha = ringAlpha;
+  ctx.strokeStyle = '#00cfff';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx - ringSize / 2, cy - ringSize / 2, ringSize, ringSize);
+
   ctx.globalAlpha = 1;
 }
 

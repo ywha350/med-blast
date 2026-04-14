@@ -1,0 +1,17 @@
+{
+  "name": "Med Blast",
+  "short_name": "Med Blast",
+  "description": "Doctor vs. Germs",
+  "start_url": "/med-blast/",
+  "display": "standalone",
+  "background_color": "#1a2a3a",
+  "theme_color": "#ef334d",
+  "icons": [
+    {
+      "src": "/med-blast/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -15,7 +15,7 @@ export function useGameAudio(state: GameState): void {
     if (!prev) return;
 
     // Game phase transitions
-    if (state.phase === 'playing' && (prev.phase === 'start' || prev.phase === 'game_over')) {
+    if (state.phase === 'playing' && prev.phase === 'game_over') {
       AudioManager.play('game_start');
       return;
     }
@@ -75,6 +75,11 @@ export function useGameAudio(state: GameState): void {
     // Shield activated
     if (state.player.shieldActive && !prev.player.shieldActive) {
       AudioManager.play('shield_activate');
+    }
+
+    // Shield broken
+    if (!state.player.shieldActive && prev.player.shieldActive) {
+      AudioManager.play('shield_break');
     }
 
     // Regen: player HP increased without picking up an hp_potion

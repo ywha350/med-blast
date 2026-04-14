@@ -48,7 +48,7 @@ export const ALL_SKILLS: Skill[] = [
   {
     id: 'revive',
     name: 'Second Wind',
-    description: 'Revive with 1 HP when killed, if no enemies are within 3 tiles',
+    description: 'Upon death, revive with 1 HP and destroy all enemies within 3 tiles',
     category: 'Special',
     apply: (p) => ({ ...p, hasRevive: true }),
   },

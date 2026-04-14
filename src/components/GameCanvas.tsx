@@ -81,6 +81,7 @@ function buildAnimDiff(prev: GameState, curr: GameState): AnimDiff {
     })
     .filter((l): l is ChainLink => l !== null);
 
+  const playerShieldBreak = prev.player.shieldActive && !curr.player.shieldActive;
   const playerHit = curr.hitFlash && curr.hitFlashTick === curr.tick;
   const playerDied = curr.phase === 'game_over' && playerHit;
 
@@ -129,6 +130,7 @@ function buildAnimDiff(prev: GameState, curr: GameState): AnimDiff {
     enemyLunges,
     shockwaves,
     shieldBreaks,
+    playerShieldBreak,
   };
 }
 

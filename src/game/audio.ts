@@ -12,6 +12,7 @@ export type SoundName =
   | 'game_start'
   | 'boss_spawn'
   | 'shield_activate'
+  | 'shield_break'
   | 'regen'
   | 'move';
 
@@ -305,6 +306,35 @@ function playShieldActivate() {
   osc2.stop(t + 0.26);
 }
 
+function playShieldBreak() {
+  // Shield shatter: sharp noise crack + descending sweep
+  const c = getCtx(); if (!c) return;
+  const t = time();
+
+  // Noise crack
+  const ng = makeGain(0.28);
+  ng.gain.setValueAtTime(0.28, t);
+  ng.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  const noise = makeNoise(0.13);
+  const hp = makeHighpass(2000);
+  noise.connect(hp);
+  hp.connect(ng);
+  noise.start(t);
+  noise.stop(t + 0.13);
+
+  // Descending sweep
+  const og = makeGain(0.2);
+  og.gain.setValueAtTime(0.2, t);
+  og.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  const osc = c.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(1200, t);
+  osc.frequency.exponentialRampToValueAtTime(180, t + 0.2);
+  osc.connect(og);
+  osc.start(t);
+  osc.stop(t + 0.22);
+}
+
 function playMove() {
   // Soft footstep on hospital linoleum: muffled noise thud + faint click
   const c = getCtx(); if (!c) return;
@@ -365,6 +395,7 @@ const soundMap: Record<SoundName, () => void> = {
   game_start: playGameStart,
   boss_spawn: playBossSpawn,
   shield_activate: playShieldActivate,
+  shield_break: playShieldBreak,
   regen: playRegen,
   move: playMove,
 };
@@ -382,11 +413,12 @@ export const AudioManager = {
   },
 
   play(sound: SoundName) {
-    if (!ctx || ctx.state !== 'running') return;
-    try {
-      soundMap[sound]();
-    } catch {
-      // Swallow audio errors silently
+    if (!ctx || ctx.state === 'closed') return;
+    const doPlay = () => { try { soundMap[sound](); } catch { } };
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(doPlay);
+    } else {
+      doPlay();
     }
   },
 };

@@ -526,9 +526,15 @@ export function processTick(state: GameState, dir: Direction): GameState {
   };
 
   if (s.player.hp <= 0) {
-    const clearOfEnemies = s.enemies.every(e => manDist(e.pos, s.player.pos) > 3);
-    if (s.player.hasRevive && clearOfEnemies) {
-      s = { ...s, player: { ...s.player, hp: 1 } };
+    if (s.player.hasRevive) {
+      const survivors = s.enemies.filter(e => manDist(e.pos, s.player.pos) > 3);
+      const killed = s.enemies.filter(e => manDist(e.pos, s.player.pos) <= 3);
+      const expGained = killed.reduce((sum, e) => sum + ENEMY_STATS[e.type].exp, 0);
+      s = {
+        ...s,
+        enemies: survivors,
+        player: { ...s.player, hp: 1, hasRevive: false, exp: s.player.exp + expGained },
+      };
     } else {
       return endGame(s);
     }

@@ -223,6 +223,11 @@ export function renderFrame(
     }
   }
 
+  // ── Player shield break burst ─────────────────────────────────────────
+  if (diff?.playerShieldBreak && effectT > 0 && effectT < 1) {
+    drawShieldBreak(ctx, playerSX, playerSY, effectT);
+  }
+
   // ── Projectiles (interpolated) ─────────────────────────────────────────
   if (diff) {
     for (const p of diff.projectiles) {

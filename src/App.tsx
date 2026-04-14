@@ -76,7 +76,7 @@ export default function App() {
         <StartScreen
           lastScore={state.lastScore}
           bestScore={state.bestScore}
-          onPlay={() => { AudioManager.init(); dispatch({ type: 'START' }); }}
+          onPlay={() => { AudioManager.init(); AudioManager.play('game_start'); dispatch({ type: 'START' }); }}
         />
       </div>
     );

@@ -419,12 +419,16 @@ function drawEnemy(
   }
 
   // Fallback grayscale for browsers without ctx.filter support (e.g. iOS Safari < 18)
+  // Use 'saturation' composite op to force 0 saturation on already-drawn pixels.
   if (!supportsCanvasFilter && !movesNext && !isHit) {
     const tileW = enemy.type === 'abnormal' ? TILE * 2 : TILE;
     const tileH = enemy.type === 'abnormal' ? TILE * 2 : TILE;
-    ctx.globalAlpha = 0.55 * assassinAlpha;
-    ctx.fillStyle = '#c8c8c8';
+    ctx.save();
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#808080';
     ctx.fillRect(sx, sy, tileW, tileH);
+    ctx.restore();
   }
 
   if (supportsCanvasFilter) ctx.filter = 'none';

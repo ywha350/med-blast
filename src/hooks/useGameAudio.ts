@@ -15,7 +15,7 @@ export function useGameAudio(state: GameState): void {
     if (!prev) return;
 
     // Game phase transitions
-    if (state.phase === 'playing' && prev.phase === 'start') {
+    if (state.phase === 'playing' && (prev.phase === 'start' || prev.phase === 'game_over')) {
       AudioManager.play('game_start');
       return;
     }

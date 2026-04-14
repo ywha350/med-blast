@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useState } from 'react';
 import { useGameAudio } from './hooks/useGameAudio';
+import { AudioManager } from './game/audio';
 import { GameState, Direction } from './game/types';
 import { createInitialState, startGame, processTick, applySkill, restartGame, calcScore } from './game/engine';
 import { StartScreen } from './components/StartScreen';
@@ -75,7 +76,7 @@ export default function App() {
         <StartScreen
           lastScore={state.lastScore}
           bestScore={state.bestScore}
-          onPlay={() => dispatch({ type: 'START' })}
+          onPlay={() => { AudioManager.init(); dispatch({ type: 'START' }); }}
         />
       </div>
     );

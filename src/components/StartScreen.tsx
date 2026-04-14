@@ -15,7 +15,7 @@ export function StartScreen({ lastScore, bestScore, onPlay }: StartScreenProps) 
             {/* Doctor pixel art representation via CSS */}
             <div className="pixel-doctor" />
           </div>
-          <h1 className="game-title">GRID<br />ROGUE</h1>
+          <h1 className="game-title">MED<br />BLAST</h1>
           <p className="game-subtitle">Doctor vs. Germs</p>
         </div>
 

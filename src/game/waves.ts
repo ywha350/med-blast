@@ -8,7 +8,7 @@
  *
  * QUICK REFERENCE
  * ───────────────
- * Enemy types: 'normal' | 'speedy' | 'tanker' | 'ranged' | 'tracer' | 'boss' | 'abnormal' | 'assassin' | 'shocker'
+ * Enemy types: 'normal' | 'speedy' | 'tanker' | 'ranged' | 'tracer' | 'boss' | 'abnormal'
  *
  * To add a new named wave:   push a new entry into WAVE_DEFS
  * To change wave 3's mix:    edit WAVE_DEFS[3].weights
@@ -71,7 +71,7 @@ export interface WaveDef {
 }
 
 export const WAVE_DEFS: WaveDef[] = [
-  { weights: { normal: 55, speedy: 25, tanker: 20 } },
+  { weights: { normal: 45, speedy: 30, tanker: 25 } },
   // Wave 3 — ranged enemies arrive
   { weights: { normal: 32, speedy: 30, tanker: 18, ranged: 20 } },
   // Wave 4 — tanker-heavy push
@@ -84,16 +84,16 @@ export const WAVE_DEFS: WaveDef[] = [
   { weights: { normal: 20, speedy: 10, tanker: 0, ranged: 10, tracer: 70 } },
   // Wave 8 — abnormal arrives
   { weights: { normal: 20, speedy: 15, tanker: 15, ranged: 15, tracer: 10, abnormal: 25 } },
-  // Wave 9 — assassin arrives
-  { weights: { normal: 18, speedy: 12, tanker: 12, ranged: 12, tracer: 10, abnormal: 18, assassin: 18 } },
-  // Wave 10 — shocker arrives
-  { weights: { normal: 15, speedy: 10, tanker: 12, ranged: 12, tracer: 8, abnormal: 14, assassin: 14, shocker: 15 } },
+  // Wave 9 — abnormal-heavy push
+  { weights: { normal: 18, speedy: 12, tanker: 12, ranged: 12, tracer: 10, abnormal: 36 } },
+  // Wave 10 — all-rounder chaos
+  { weights: { normal: 15, speedy: 10, tanker: 12, ranged: 12, tracer: 8, abnormal: 28 } },
 
 ];
 
 // Wave 11+ — all types, balanced chaos (applies when wave >= WAVE_DEFS.length)
 export const DEFAULT_WAVE: WaveDef = {
-  weights: { normal: 10, speedy: 10, tanker: 15, ranged: 12, tracer: 10, abnormal: 12, assassin: 11, shocker: 10 },
+  weights: { normal: 10, speedy: 10, tanker: 15, ranged: 12, tracer: 10, abnormal: 22 },
 };
 
 // ── Helpers (used by engine.ts — no need to edit these) ─────────────────────

@@ -173,6 +173,20 @@ function moveEnemyTowardPlayer(enemy: Enemy, player: Player, enemies: Enemy[]): 
   return enemy.pos;
 }
 
+function displacedRangedPos(enemy: Enemy, player: Player, enemies: Enemy[]): Position {
+  // Current tile is occupied by a committed enemy — slide to any adjacent free tile
+  const slides = [
+    { x: enemy.pos.x + 1, y: enemy.pos.y },
+    { x: enemy.pos.x - 1, y: enemy.pos.y },
+    { x: enemy.pos.x, y: enemy.pos.y + 1 },
+    { x: enemy.pos.x, y: enemy.pos.y - 1 },
+  ];
+  for (const m of slides) {
+    if (!posEq(m, player.pos) && !isOccupiedByEnemy(m, enemies, enemy.id)) return m;
+  }
+  return enemy.pos;
+}
+
 function moveRangedEnemy(enemy: Enemy, player: Player, enemies: Enemy[]): Position {
   const dist = manDist(enemy.pos, player.pos);
   // Retreat if too close, approach if too far, hover at 4 tiles
@@ -191,13 +205,19 @@ function moveRangedEnemy(enemy: Enemy, player: Player, enemies: Enemy[]): Positi
     for (const m of moves) {
       if (!posEq(m, player.pos) && !isOccupiedByEnemy(m, enemies, enemy.id)) return m;
     }
+    if (isOccupiedByEnemy(enemy.pos, enemies, enemy.id)) return displacedRangedPos(enemy, player, enemies);
     return enemy.pos;
   }
   if (dist > 5) {
-    if (playerMovingToward(player, enemy)) return enemy.pos;
+    if (playerMovingToward(player, enemy)) {
+      if (isOccupiedByEnemy(enemy.pos, enemies, enemy.id)) return displacedRangedPos(enemy, player, enemies);
+      return enemy.pos;
+    }
     return moveEnemyTowardPlayer(enemy, player, enemies);
   }
-  return enemy.pos; // hover
+  // hover — check if another enemy has moved into this tile already
+  if (isOccupiedByEnemy(enemy.pos, enemies, enemy.id)) return displacedRangedPos(enemy, player, enemies);
+  return enemy.pos;
 }
 
 function moveAbnormalTowardPlayer(enemy: Enemy, player: Player, enemies: Enemy[]): Position {
@@ -468,7 +488,11 @@ export function processTick(state: GameState, dir: Direction): GameState {
         break;
       }
       case 'ranged': {
-        const newPos = takesStep ? moveRangedEnemy(enemy, s.player, movedEnemies) : enemy.pos;
+        const newPos = takesStep
+          ? moveRangedEnemy(enemy, s.player, movedEnemies)
+          : isOccupiedByEnemy(enemy.pos, movedEnemies, enemy.id)
+            ? displacedRangedPos(enemy, s.player, movedEnemies)
+            : enemy.pos;
         let cooldown = Math.max(0, enemy.fireCooldown - 1);
         if (takesStep && cooldown === 0 && manDist(enemy.pos, s.player.pos) <= 6) {
           const fired = fireProjectile(enemy, s.player, { ...s, projectiles, nextProjectileId });

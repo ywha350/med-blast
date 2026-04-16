@@ -7,9 +7,10 @@ interface StartScreenProps {
   taLastScore: number;
   taBestScore: number;
   onPlayMode: (mode: GameMode) => void;
+  onGuide: () => void;
 }
 
-export function StartScreen({ bestScore, taBestScore, onPlayMode }: StartScreenProps) {
+export function StartScreen({ bestScore, taBestScore, onPlayMode, onGuide }: StartScreenProps) {
   return (
     <div className="screen start-screen">
       <div className="start-content">
@@ -38,6 +39,8 @@ export function StartScreen({ bestScore, taBestScore, onPlayMode }: StartScreenP
             </span>
           </button>
         </div>
+
+        <button className="guide-open-btn" onClick={onGuide}>? HOW TO PLAY</button>
 
       </div>
     </div>

@@ -82,6 +82,11 @@ export function useGameAudio(state: GameState): void {
       AudioManager.play('shield_break');
     }
 
+    // Enemy shield hit: enemy still alive but shield absorbed the blow
+    const prevEnemyMap = new Map(prev.enemies.map(e => [e.id, e]));
+    const enemyShieldHit = state.enemies.some(e => prevEnemyMap.get(e.id)?.shield && !e.shield);
+    if (enemyShieldHit) AudioManager.play('laser');
+
     // Second Wind triggered
     if (prev.player.hasRevive && !state.player.hasRevive && state.player.hp > 0) {
       AudioManager.play('revive');

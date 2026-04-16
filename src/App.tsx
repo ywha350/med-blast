@@ -5,10 +5,13 @@ import { GameState, GameMode, Direction } from './game/types';
 import { createInitialState, startGame, processTick, applySkill, restartGame, calcScore } from './game/engine';
 import { TIME_ATTACK_DURATION } from './game/waves';
 import { StartScreen } from './components/StartScreen';
+import { GuideScreen } from './components/GuideScreen';
 import { GameCanvas } from './components/GameCanvas';
 import { HUD } from './components/HUD';
 import { SkillSelect } from './components/SkillSelect';
 import { GameOver } from './components/GameOver';
+
+const TUTORIAL_KEY = 'medblast_seen_tutorial';
 import { TICK_DURATION, AFTER_MOVE_DELAY, EFFECT_DURATION, HIT_FLASH_DURATION, DEATH_DURATION } from './game/animTypes';
 
 type Action =
@@ -37,6 +40,7 @@ function reducer(state: GameState, action: Action): GameState {
 export default function App() {
   const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
   useGameAudio(state);
+  const [showGuide, setShowGuide] = useState(() => !localStorage.getItem(TUTORIAL_KEY));
   const [showSkillSelect, setShowSkillSelect] = useState(false);
   const [displayTime, setDisplayTime] = useState(0);
   const [showGameOver, setShowGameOver] = useState(false);
@@ -71,6 +75,14 @@ export default function App() {
     dispatch({ type: 'SELECT_SKILL', skillId });
   }, []);
 
+  if (showGuide) {
+    return (
+      <div className="app">
+        <GuideScreen onDismiss={() => { localStorage.setItem(TUTORIAL_KEY, '1'); setShowGuide(false); }} />
+      </div>
+    );
+  }
+
   if (state.phase === 'start') {
     return (
       <div className="app">
@@ -80,6 +92,7 @@ export default function App() {
           taLastScore={state.taLastScore}
           taBestScore={state.taBestScore}
           onPlayMode={(mode) => { AudioManager.init(); AudioManager.play('game_start'); dispatch({ type: 'START', mode }); }}
+          onGuide={() => setShowGuide(true)}
         />
       </div>
     );

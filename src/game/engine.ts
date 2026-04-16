@@ -408,7 +408,7 @@ export function processTick(state: GameState, dir: Direction): GameState {
   if (visibleCount < MAX_ENEMIES && s.tick % interval === 0) s = spawnEnemy(s);
   if (visibleCount < MAX_ENEMIES && s.tick % (interval * 2) === 0) s = spawnEnemy(s);
   // Boss spawn
-  if (s.tick > 0 && s.tick % SPAWN.bossEvery === 0) s = spawnEnemy(s, 'boss');
+  if (s.tick > 0 && s.tick % SPAWN.bossEvery === 0 && s.gameMode !== 'time_attack') s = spawnEnemy(s, 'boss');
 
   // ── Move enemies ────────────────────────────────────────────────────────
   let projectiles = [...s.projectiles];

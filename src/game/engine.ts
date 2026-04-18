@@ -67,6 +67,7 @@ function createPlayer(): Player {
     hasRevive: false,
     shieldActive: false,
     attackBoostCharges: 0,
+    bulletBoostCharges: 0,
     regenChance: 0,
   };
 }
@@ -301,7 +302,7 @@ function rng(n: number): number { return Math.floor(Math.random() * n); }
 
 // ── Shared helpers ───────────────────────────────────────────────────────────
 
-const ITEM_TYPES: ItemType[] = ['hp_potion', 'attack_boost', 'magnet', 'shield'];
+const ITEM_TYPES: ItemType[] = ['hp_potion', 'attack_boost', 'magnet', 'shield', 'bullet_x2'];
 
 function mkDmg(
   id: number, pos: Position, value: number, tick: number,
@@ -619,12 +620,14 @@ function performAttack(state: GameState): GameState {
 
   const damage = player.attackBoostCharges > 0 ? player.attack * 2 : player.attack;
   let boostCharges = player.attackBoostCharges;
+  let bulletBoostCharges = player.bulletBoostCharges;
+  const effectiveBulletCount = bulletBoostCharges > 0 ? player.bulletCount + 2 : player.bulletCount;
 
   let targets: Enemy[];
-  if (player.bulletCount > 0) {
+  if (effectiveBulletCount > 0) {
     const dirs = [
       [0,-1],[0,1],[-1,0],[1,0],[-1,-1],[1,-1],[-1,1],[1,1],
-    ].slice(0, player.bulletCount * 2);
+    ].slice(0, effectiveBulletCount * 2);
     const targetSet = new Set<number>();
     targets = [];
     for (const [dx, dy] of dirs) {
@@ -637,7 +640,7 @@ function performAttack(state: GameState): GameState {
       }
     }
     for (const e of inRange) {
-      if (targets.length >= player.attackTargets + player.bulletCount * 2) break;
+      if (targets.length >= player.attackTargets + effectiveBulletCount * 2) break;
       if (!targetSet.has(e.id)) { targets.push(e); targetSet.add(e.id); }
     }
   } else {
@@ -673,6 +676,8 @@ function performAttack(state: GameState): GameState {
     }
   }
 
+  if (targets.length > 0 && bulletBoostCharges > 0) bulletBoostCharges--;
+
   for (const target of targets) {
     applyDamage(target.id, damage);
     if (boostCharges > 0) boostCharges--;
@@ -691,7 +696,7 @@ function performAttack(state: GameState): GameState {
     }
   }
 
-  player = { ...player, attackBoostCharges: boostCharges };
+  player = { ...player, attackBoostCharges: boostCharges, bulletBoostCharges };
   return {
     ...state,
     player,
@@ -779,6 +784,7 @@ function applyItem(player: Player, type: ItemType): Player {
     case 'attack_boost': return { ...player, attackBoostCharges: player.attackBoostCharges + 5 };
     case 'magnet':       return { ...player, exp: player.exp + 10 };
     case 'shield':       return { ...player, shieldActive: true };
+    case 'bullet_x2':   return { ...player, bulletBoostCharges: player.bulletBoostCharges + 5 };
   }
 }
 

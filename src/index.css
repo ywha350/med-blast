@@ -399,7 +399,7 @@ html, body {
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
-  min-width: 80px;
+  min-width: 140px;
 }
 
 .status-badge {
@@ -411,6 +411,7 @@ html, body {
 
 .badge-shield { color: var(--accent-blue); border-color: var(--accent-blue); }
 .badge-boost { color: var(--accent-yellow); border-color: var(--accent-yellow); }
+.badge-bullet { color: #06d6a0; border-color: #06d6a0; background: rgba(6,214,160,0.12); }
 .badge-revive { color: #ffd60a; border-color: #ffd60a; }
 
 /* ========== CANVAS ========== */

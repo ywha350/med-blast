@@ -4,7 +4,7 @@ export interface Position {
 }
 
 export type EnemyType = 'normal' | 'tanker' | 'speedy' | 'ranged' | 'boss' | 'tracer' | 'abnormal' | 'assassin' | 'shocker';
-export type ItemType = 'hp_potion' | 'attack_boost' | 'magnet' | 'shield';
+export type ItemType = 'hp_potion' | 'attack_boost' | 'magnet' | 'shield' | 'bullet_x2';
 export type GamePhase = 'start' | 'playing' | 'skill_select' | 'game_over';
 export type GameMode = 'classic' | 'time_attack';
 export type Direction = 'up' | 'down' | 'left' | 'right';
@@ -30,6 +30,7 @@ export interface Player {
   hasRevive: boolean;
   shieldActive: boolean;
   attackBoostCharges: number;
+  bulletBoostCharges: number;
   regenChance: number;
 }
 

@@ -53,6 +53,7 @@ const C = {
   item_attack_boost: '#f4a261',
   item_magnet: '#4cc9f0',
   item_shield: '#4361ee',
+  item_bullet_x2: '#06d6a0',
 };
 
 /** Main color for an enemy type — shared by drawing and death effects. */
@@ -1047,6 +1048,19 @@ function drawItem(
       ctx.fillRect(cx - 2, cy - 6, 4, 12);
       ctx.fillRect(cx - 6, cy - 2, 12, 4);
       break;
+    case 'bullet_x2': {
+      ctx.fillStyle = C.item_bullet_x2;
+      // two bullet shapes side by side
+      ctx.beginPath();
+      ctx.ellipse(cx - 4, cy, 2, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx + 4, cy, 2, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(cx - 6, cy - 10, 4, 4);
+      ctx.fillRect(cx + 2, cy - 10, 4, 4);
+      break;
+    }
   }
 
   ctx.strokeStyle = 'rgba(0,0,0,0.25)';

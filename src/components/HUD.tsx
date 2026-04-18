@@ -68,6 +68,9 @@ export function HUD({ player, kills, level, score, elapsedTime, gameMode, timeLi
         {player.attackBoostCharges > 0 && (
           <span className="status-badge badge-boost">ATK x2 ({player.attackBoostCharges})</span>
         )}
+        {player.bulletBoostCharges > 0 && (
+          <span className="status-badge badge-bullet">BULLET x2 ({player.bulletBoostCharges})</span>
+        )}
         {player.hasRevive && (
           <span className="status-badge badge-revive">REVIVE</span>
         )}
